@@ -2,17 +2,18 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { joinCompany } from '@/services/auth';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { theme } from '@/constants/theme';
 
 export default function JoinScreen() {
   const [joinCode, setJoinCode] = useState('');
@@ -47,57 +48,61 @@ export default function JoinScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.logoMark}>
+          <Text style={styles.logoMarkText}>IT</Text>
+        </View>
+
         <Text style={styles.title}>Join Company</Text>
-        <Text style={styles.subtitle}>Enter the join code from your admin</Text>
+        <Text style={styles.subtitle}>Enter the code from your admin</Text>
 
         <Text style={styles.label}>Join code</Text>
-        <TextInput
-          style={[styles.input, styles.codeInput]}
-          placeholder="e.g. A3F7B21C"
+        <Input
+          placeholder="A3F7B21C"
           value={joinCode}
           onChangeText={(t) => setJoinCode(t.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
           autoCapitalize="characters"
           autoCorrect={false}
           autoComplete="off"
           maxLength={8}
+          style={styles.codeInput}
         />
 
         <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="you@company.com"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          style={styles.inputSpacing}
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="Min 6 characters"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="new-password"
+          style={styles.inputSpacing}
         />
 
-        <TouchableOpacity
-          style={[styles.button, (!joinCode.trim() || !email.trim() || !password || loading) && styles.buttonDisabled]}
+        <Button
+          title="Join Company"
           onPress={handleJoin}
-          disabled={!joinCode.trim() || !email.trim() || !password || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Join Company</Text>
-          )}
-        </TouchableOpacity>
+          loading={loading}
+          disabled={!joinCode.trim() || !email.trim() || !password}
+          style={{ marginTop: 8, marginBottom: 0 }}
+        />
 
         <TouchableOpacity style={styles.link} onPress={() => router.back()}>
-          <Text style={styles.linkText}>Already have an account? Sign in</Text>
+          <Text style={styles.linkText}>← Back to sign in</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -107,68 +112,66 @@ export default function JoinScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
   },
   inner: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingTop: 80,
-    paddingBottom: 40,
+    paddingBottom: 48,
+  },
+  logoMark: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  logoMarkText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: '800',
+    color: theme.colors.text,
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 32,
+    color: theme.colors.textMuted,
+    marginBottom: 36,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
     marginTop: 4,
   },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    backgroundColor: '#fafafa',
-  },
   codeInput: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
-    letterSpacing: 4,
+    letterSpacing: 6,
     textAlign: 'center',
-    color: '#111',
+    color: theme.colors.text,
+    marginBottom: 20,
   },
-  button: {
-    height: 52,
-    backgroundColor: '#111',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.4 },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  inputSpacing: {
+    marginBottom: 16,
   },
   link: {
-    marginTop: 20,
+    marginTop: 24,
     alignItems: 'center',
+    paddingVertical: 8,
   },
   linkText: {
-    color: '#555',
+    color: theme.colors.textMuted,
     fontSize: 15,
+    fontWeight: '500',
   },
 });

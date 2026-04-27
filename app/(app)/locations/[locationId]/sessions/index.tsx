@@ -11,6 +11,7 @@ import {
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getSessions, createSession, Session } from '@/services/sessions';
 import { getLocationProductCount } from '@/services/products';
+import { theme, shadows } from '@/constants/theme';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -100,6 +101,8 @@ export default function SessionsScreen() {
     );
   }
 
+  const isStartDisabled = starting || activeSessions.length > 0 || productCount === 0;
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -118,7 +121,7 @@ export default function SessionsScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={theme.colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -134,26 +137,41 @@ export default function SessionsScreen() {
                   <TouchableOpacity
                     style={styles.continueBtn}
                     onPress={() => openSession(activeSessions[0])}
+                    activeOpacity={0.8}
                   >
                     <Text style={styles.continueBtnText}>Continue Counting  →</Text>
                   </TouchableOpacity>
                 </View>
               )}
 
-              <TouchableOpacity
-                style={[
-                  styles.startBtn,
-                  (starting || activeSessions.length > 0 || productCount === 0) && styles.startBtnDisabled,
-                ]}
-                onPress={handleStartSession}
-                disabled={starting || productCount === 0}
-              >
-                {starting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.startBtnText}>+ Start New Session</Text>
-                )}
-              </TouchableOpacity>
+              {productCount === 0 ? (
+                <View style={styles.noProductsCard}>
+                  <Text style={styles.noProductsTitle}>No products yet</Text>
+                  <Text style={styles.noProductsSub}>
+                    Add or import products before starting inventory.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.goToProductsBtn}
+                    onPress={() => router.push(`/locations/${locationId}?name=${encodeURIComponent(name ?? '')}`)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.goToProductsBtnText}>Go to Products →</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.startBtn, isStartDisabled && styles.startBtnDisabled]}
+                  onPress={handleStartSession}
+                  disabled={starting}
+                  activeOpacity={0.75}
+                >
+                  {starting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.startBtnText}>+ Start New Session</Text>
+                  )}
+                </TouchableOpacity>
+              )}
 
               {pastSessions.length > 0 && (
                 <Text style={styles.sectionHeader}>PREVIOUS SESSIONS</Text>
@@ -162,16 +180,23 @@ export default function SessionsScreen() {
           }
           ListEmptyComponent={
             activeSessions.length === 0 ? (
-              <Text style={styles.emptyText}>No previous sessions.</Text>
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyText}>No previous sessions yet.</Text>
+                <Text style={styles.emptySubText}>Completed sessions will appear here.</Text>
+              </View>
             ) : null
           }
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.sessionRow} onPress={() => openSession(item)}>
+            <TouchableOpacity
+              style={styles.sessionRow}
+              onPress={() => openSession(item)}
+              activeOpacity={0.7}
+            >
               <View style={styles.sessionRowLeft}>
                 <Text style={styles.sessionDate}>{formatDate(item.created_at)}</Text>
               </View>
               <View style={styles.completedBadge}>
-                <Text style={styles.completedBadgeText}>Completed</Text>
+                <Text style={styles.completedBadgeText}>Completed ✓</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -182,64 +207,133 @@ export default function SessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: 16, gap: 10 },
+  list: { padding: theme.spacing.lg, gap: 10, paddingBottom: 32 },
   headerBtn: { paddingHorizontal: 4 },
-  headerBtnText: { fontSize: 15, fontWeight: '600', color: '#111' },
+  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
+
+  // Active session card
   activeCard: {
-    backgroundColor: '#111',
-    borderRadius: 14,
-    padding: 20,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.xl,
+    padding: 22,
     marginBottom: 12,
   },
   activeLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#aaa',
-    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.2,
     marginBottom: 6,
   },
-  activeDate: { fontSize: 15, color: '#fff', marginBottom: 16 },
+  activeDate: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 18,
+    fontWeight: '500',
+  },
   continueBtn: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingVertical: 14,
+    borderRadius: theme.radius.md,
+    paddingVertical: 15,
     alignItems: 'center',
   },
-  continueBtnText: { fontSize: 16, fontWeight: '700', color: '#111' },
+  continueBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+    letterSpacing: 0.1,
+  },
+
+  // No products empty state
+  noProductsCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: 24,
+    marginBottom: 28,
+    alignItems: 'center',
+    ...shadows.sm,
+  },
+  noProductsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 6,
+  },
+  noProductsSub: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  goToProductsBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.primary,
+  },
+  goToProductsBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // Start button
   startBtn: {
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 18,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
+    ...shadows.sm,
   },
-  startBtnDisabled: { backgroundColor: '#ccc' },
-  startBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  startBtnDisabled: {
+    backgroundColor: '#CCCCCC',
+  },
+  startBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.2,
+  },
+
+  // Section
   sectionHeader: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
-    letterSpacing: 1,
+    color: theme.colors.textLight,
+    letterSpacing: 1.2,
     marginBottom: 8,
   },
+
+  // Past session rows
   sessionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    ...shadows.sm,
   },
   sessionRowLeft: { flex: 1 },
-  sessionDate: { fontSize: 15, color: '#333' },
+  sessionDate: { fontSize: 15, color: theme.colors.textSecondary, fontWeight: '500' },
   completedBadge: {
-    backgroundColor: '#e8f5e9',
-    borderRadius: 8,
+    backgroundColor: theme.colors.successBg,
+    borderRadius: theme.radius.xs,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
-  completedBadgeText: { fontSize: 12, fontWeight: '600', color: '#2e7d32' },
-  emptyText: { color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 8 },
+  completedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.success,
+  },
+
+  // Empty state
+  emptyWrap: { alignItems: 'center', paddingTop: 8 },
+  emptyText: { color: theme.colors.textLight, fontSize: 15, fontWeight: '500', marginBottom: 4 },
+  emptySubText: { color: theme.colors.textPlaceholder, fontSize: 13 },
 });

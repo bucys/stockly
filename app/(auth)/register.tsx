@@ -2,17 +2,18 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { signUp } from '@/services/auth';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { theme } from '@/constants/theme';
 
 export default function RegisterScreen() {
   const [companyName, setCompanyName] = useState('');
@@ -51,47 +52,54 @@ export default function RegisterScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.logoMark}>
+          <Text style={styles.logoMarkText}>IT</Text>
+        </View>
+
         <Text style={styles.title}>Create Company</Text>
-        <Text style={styles.subtitle}>Set up your company workspace — you'll be the admin</Text>
+        <Text style={styles.subtitle}>Set up your workspace — you'll be the admin</Text>
 
         <Text style={styles.label}>Company name</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="e.g. Acme Warehouse"
           value={companyName}
           onChangeText={setCompanyName}
           autoCapitalize="words"
+          style={styles.inputSpacing}
         />
 
         <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="you@company.com"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          style={styles.inputSpacing}
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="Min 6 characters"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="new-password"
+          style={styles.inputSpacing}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Create Account</Text>
-          )}
-        </TouchableOpacity>
+        <Button
+          title="Create Account"
+          onPress={handleRegister}
+          loading={loading}
+          style={{ marginTop: 8, marginBottom: 0 }}
+        />
 
         <TouchableOpacity style={styles.link} onPress={() => router.back()}>
           <Text style={styles.linkText}>← Back to sign in</Text>
@@ -104,60 +112,58 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
   },
   inner: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingTop: 80,
-    paddingBottom: 40,
+    paddingBottom: 48,
+  },
+  logoMark: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  logoMarkText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: '800',
+    color: theme.colors.text,
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 32,
+    color: theme.colors.textMuted,
+    marginBottom: 36,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
     marginTop: 4,
   },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
+  inputSpacing: {
     marginBottom: 16,
-    backgroundColor: '#fafafa',
-  },
-  button: {
-    height: 52,
-    backgroundColor: '#111',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   link: {
-    marginTop: 20,
+    marginTop: 24,
     alignItems: 'center',
+    paddingVertical: 8,
   },
   linkText: {
-    color: '#555',
+    color: theme.colors.textMuted,
     fontSize: 15,
+    fontWeight: '500',
   },
 });

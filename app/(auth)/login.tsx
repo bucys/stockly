@@ -2,16 +2,16 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { signIn } from '@/services/auth';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { theme } from '@/constants/theme';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -37,54 +37,55 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.inner}>
-        <Text style={styles.title}>Inventory Tracker</Text>
-        <Text style={styles.subtitle}>Sign in to your account</Text>
+        <View style={styles.logoMark}>
+          <Text style={styles.logoMarkText}>IT</Text>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
+        <Text style={styles.title}>Inventory Tracker</Text>
+        <Text style={styles.subtitle}>Sign in to continue</Text>
+
+        <Input
+          placeholder="Email address"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
+          style={styles.inputSpacing}
         />
-        <TextInput
-          style={styles.input}
+        <Input
           placeholder="Password"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="current-password"
+          style={styles.inputSpacing}
         />
 
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
-        </TouchableOpacity>
+        <Button
+          title="Sign In"
+          onPress={handleLogin}
+          loading={loading}
+          style={styles.primaryBtn}
+        />
 
         <View style={styles.dividerRow}>
           <View style={styles.divider} />
-          <Text style={styles.dividerText}>new here?</Text>
+          <Text style={styles.dividerText}>New to Inventory Tracker?</Text>
           <View style={styles.divider} />
         </View>
 
-        <TouchableOpacity
-          style={styles.altBtn}
+        <Button
+          title="Create company account"
           onPress={() => router.push('/(auth)/register')}
-        >
-          <Text style={styles.altBtnText}>Create company account</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.altBtn, styles.altBtnSecondary]}
+          variant="outline"
+        />
+        <Button
+          title="Join with a code"
           onPress={() => router.push('/(auth)/join')}
-        >
-          <Text style={styles.altBtnText}>Join existing company</Text>
-        </TouchableOpacity>
+          variant="outline"
+          style={{ marginBottom: 0 }}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -93,79 +94,61 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surface,
   },
   inner: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     justifyContent: 'center',
+    paddingBottom: 24,
+  },
+  logoMark: {
+    width: 56,
+    height: 56,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  logoMarkText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111',
-    marginBottom: 8,
+    fontSize: 30,
+    fontWeight: '800',
+    color: theme.colors.text,
+    letterSpacing: -0.5,
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 32,
+    color: theme.colors.textMuted,
+    marginBottom: 36,
   },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
+  inputSpacing: {
     marginBottom: 12,
-    backgroundColor: '#fafafa',
   },
-  button: {
-    height: 52,
-    backgroundColor: '#111',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  primaryBtn: {
     marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    marginBottom: 0,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 24,
-    gap: 10,
+    gap: 12,
   },
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: theme.colors.borderLight,
   },
   dividerText: {
     fontSize: 13,
-    color: '#aaa',
-  },
-  altBtn: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    backgroundColor: '#fff',
-  },
-  altBtnSecondary: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#e8e8e8',
-  },
-  altBtnText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#333',
+    color: theme.colors.textLight,
   },
 });

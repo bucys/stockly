@@ -5,14 +5,9 @@ import {
   SectionList,
   TouchableOpacity,
   StyleSheet,
-  Modal,
   TextInput,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Keyboard,
-  Pressable,
-  Platform,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCompanyId } from '@/lib/useCompanyId';
@@ -28,6 +23,9 @@ import {
   Session,
 } from '@/services/sessions';
 import { buildCSV, ExportRow } from '@/services/export';
+import { Button } from '@/components/ui/Button';
+import { ModalSheet } from '@/components/ui/ModalSheet';
+import { theme, shadows } from '@/constants/theme';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -172,14 +170,12 @@ export default function CountingScreen() {
             'by:', row.updated_by,
           );
 
-          // Patch countsMap (keyed by product_id)
           setCountsMap((prev) => {
             const next = new Map(prev);
             next.set(row.product_id, row);
             return next;
           });
 
-          // Patch only the affected product row — no full re-render
           setSections((prev) =>
             prev.map((sec) => ({
               ...sec,
@@ -257,7 +253,6 @@ export default function CountingScreen() {
   }
 
   function closeModal() {
-    Keyboard.dismiss();
     setSelected(null);
     setInputValue('');
   }
@@ -383,7 +378,7 @@ export default function CountingScreen() {
       <TouchableOpacity
         style={styles.productRow}
         onPress={() => openProduct(item)}
-        activeOpacity={sessionStatus === 'completed' ? 1 : 0.6}
+        activeOpacity={sessionStatus === 'completed' ? 1 : 0.65}
       >
         <Text style={[styles.productName, !isCounted && sessionStatus === 'active' && styles.productNameUncounted]}>
           {item.name}
@@ -415,6 +410,7 @@ export default function CountingScreen() {
   // ── Main render ───────────────────────────────────────────────────────────
 
   const isCompleted = sessionStatus === 'completed';
+  const progressColor = pct === 100 ? theme.colors.success : theme.colors.primary;
 
   return (
     <View style={styles.container}>
@@ -438,7 +434,7 @@ export default function CountingScreen() {
       {/* Progress bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${pct}%` }]} />
+          <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: progressColor }]} />
         </View>
         <Text style={styles.progressText}>
           {counted} / {total} counted · {pct}%
@@ -451,6 +447,7 @@ export default function CountingScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Search products or categories…"
+            placeholderTextColor={theme.colors.textPlaceholder}
             value={search}
             onChangeText={setSearch}
             clearButtonMode="while-editing"
@@ -481,7 +478,7 @@ export default function CountingScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={theme.colors.primary} />
         </View>
       ) : sections.length === 0 ? (
         <View style={styles.center}>
@@ -510,86 +507,60 @@ export default function CountingScreen() {
 
       {isCompleted && !loading && role === 'admin' && (
         <View style={styles.exportFooter}>
-          <TouchableOpacity
-            style={[styles.exportBtn, exporting && styles.exportBtnDisabled]}
+          <Button
+            title="Export CSV"
             onPress={handleExport}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.exportBtnText}>Export CSV</Text>
-            )}
-          </TouchableOpacity>
+            loading={exporting}
+            style={{ marginBottom: 0 }}
+          />
         </View>
       )}
 
       {/* Quantity input modal */}
-      <Modal
+      <ModalSheet
         visible={selected !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={closeModal}
+        onClose={closeModal}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <Pressable style={styles.overlay} onPress={closeModal}>
-            <Pressable style={styles.sheet} onPress={() => {}}>
-              <Text style={styles.sheetProductName}>{selected?.name}</Text>
+        <Text style={styles.sheetProductName}>{selected?.name}</Text>
 
-              {selected?.count !== null && selected?.count !== undefined && (
-                <View style={styles.existingRow}>
-                  <Text style={styles.existingValue}>
-                    Current: {selected.count.quantity} {selected?.unit}
-                  </Text>
-                  <Text style={styles.existingMeta}>
-                    {selected.count.updated_by === userId ? 'You' : 'Team member'}
-                    {' · '}
-                    {formatTime(selected.count.updated_at)}
-                  </Text>
-                </View>
-              )}
+        {selected?.count !== null && selected?.count !== undefined && (
+          <View style={styles.existingRow}>
+            <Text style={styles.existingValue}>
+              Current: {selected.count.quantity} {selected?.unit}
+            </Text>
+            <Text style={styles.existingMeta}>
+              {selected.count.updated_by === userId ? 'You' : 'Team member'}
+              {' · '}
+              {formatTime(selected.count.updated_at)}
+            </Text>
+          </View>
+        )}
 
-              <View style={styles.inputRow}>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.quantityInput}
-                  value={inputValue}
-                  onChangeText={setInputValue}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  placeholderTextColor="#ccc"
-                  returnKeyType="done"
-                  onSubmitEditing={handleSave}
-                  selectTextOnFocus
-                />
-                <Text style={styles.unitLabel}>{selected?.unit}</Text>
-              </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            ref={inputRef}
+            style={styles.quantityInput}
+            value={inputValue}
+            onChangeText={setInputValue}
+            keyboardType="decimal-pad"
+            placeholder="0"
+            placeholderTextColor="#CCC"
+            returnKeyType="done"
+            onSubmitEditing={handleSave}
+            selectTextOnFocus
+          />
+          <Text style={styles.unitLabel}>{selected?.unit}</Text>
+        </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.saveBtn,
-                  (!inputValue.trim() || saving) && styles.saveBtnDisabled,
-                ]}
-                onPress={handleSave}
-                disabled={!inputValue.trim() || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Save</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.cancelBtn} onPress={closeModal}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+        <Button
+          title="Save"
+          onPress={handleSave}
+          loading={saving}
+          disabled={!inputValue.trim()}
+          style={{ height: 58, borderRadius: theme.radius.lg }}
+        />
+        <Button title="Cancel" onPress={closeModal} variant="ghost" />
+      </ModalSheet>
     </View>
   );
 }
@@ -597,197 +568,166 @@ export default function CountingScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   headerBtn: { paddingHorizontal: 4 },
-  headerBtnText: { fontSize: 15, fontWeight: '600', color: '#111' },
+  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
   completedBadge: {
-    backgroundColor: '#e8f5e9',
-    borderRadius: 8,
+    backgroundColor: theme.colors.successBg,
+    borderRadius: theme.radius.xs,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
-  completedBadgeText: { fontSize: 12, fontWeight: '600', color: '#2e7d32' },
+  completedBadgeText: { fontSize: 12, fontWeight: '700', color: theme.colors.success },
 
   // Progress
   progressContainer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#ececec',
+    borderBottomColor: theme.colors.borderLight,
   },
   progressTrack: {
-    height: 6,
-    backgroundColor: '#e0e0e0',
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: theme.colors.borderLight,
+    borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#111',
-    borderRadius: 3,
+    borderRadius: 4,
   },
-  progressText: { fontSize: 13, color: '#555' },
+  progressText: { fontSize: 13, color: theme.colors.textMuted, fontWeight: '500' },
 
   // List
   list: { paddingBottom: 32 },
-  listWithFooter: { paddingBottom: 100 },
+  listWithFooter: { paddingBottom: 108 },
   sectionHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingTop: 22,
     paddingBottom: 8,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: theme.colors.background,
   },
   sectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
-    letterSpacing: 1,
+    color: theme.colors.textLight,
+    letterSpacing: 1.2,
   },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    minHeight: 56,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    minHeight: 60,
   },
-  productName: { flex: 1, fontSize: 16, color: '#111' },
+  productName: { flex: 1, fontSize: 16, color: theme.colors.text },
+  productNameUncounted: { color: theme.colors.textSecondary },
   countedRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  checkmark: { fontSize: 14, color: '#2e7d32', fontWeight: '700' },
-  countedValue: { fontSize: 15, fontWeight: '600', color: '#2e7d32' },
-  emptyMark: { fontSize: 18, color: '#ccc' },
-  separator: { height: 1, backgroundColor: '#f0f0f0', marginLeft: 16 },
+  checkmark: { fontSize: 14, color: theme.colors.success, fontWeight: '700' },
+  countedValue: { fontSize: 15, fontWeight: '600', color: theme.colors.success },
+  emptyMark: { fontSize: 18, color: '#CCC' },
+  separator: { height: 1, backgroundColor: theme.colors.borderLight, marginLeft: 18 },
+  countBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  countBadgeText: { fontSize: 12, color: theme.colors.textLight, fontWeight: '600' },
 
   // Empty
-  emptyTitle: { fontSize: 16, fontWeight: '600', color: '#666', marginBottom: 8 },
-  emptySubtitle: { fontSize: 14, color: '#aaa', textAlign: 'center' },
+  emptyTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textMuted, marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: theme.colors.textLight, textAlign: 'center' },
 
-  // Modal
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  // Toolbar
+  toolbar: {
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+    gap: 10,
   },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 40,
+  searchInput: {
+    height: 42,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: theme.colors.text,
   },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  filterChipActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  filterChipText: { fontSize: 13, color: theme.colors.textMuted, fontWeight: '500' },
+  filterChipTextActive: { color: '#fff', fontWeight: '700' },
+  nextBtn: {
+    marginLeft: 'auto' as any,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+  },
+  nextBtnText: { fontSize: 13, fontWeight: '700', color: theme.colors.text },
+
+  // Counting modal
   sheetProductName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#111',
-    marginBottom: 12,
+    color: theme.colors.text,
+    marginBottom: 14,
   },
   existingRow: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radius.md,
+    padding: 14,
+    marginBottom: 18,
   },
-  existingValue: { fontSize: 15, fontWeight: '600', color: '#333', marginBottom: 2 },
-  existingMeta: { fontSize: 12, color: '#888' },
+  existingValue: { fontSize: 15, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 2 },
+  existingMeta: { fontSize: 12, color: theme.colors.textLight },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 22,
     gap: 12,
   },
   quantityInput: {
     flex: 1,
-    height: 72,
+    height: 76,
     borderWidth: 2,
-    borderColor: '#111',
-    borderRadius: 12,
-    fontSize: 36,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    fontSize: 40,
     fontWeight: '700',
     textAlign: 'center',
-    color: '#111',
-    backgroundColor: '#fafafa',
+    color: theme.colors.text,
+    backgroundColor: theme.colors.surface,
   },
   unitLabel: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#555',
-    minWidth: 40,
+    color: theme.colors.textMuted,
+    minWidth: 44,
   },
-  saveBtn: {
-    height: 56,
-    backgroundColor: '#111',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  saveBtnDisabled: { opacity: 0.35 },
-  saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  cancelBtn: { alignItems: 'center', paddingVertical: 10 },
-  cancelText: { color: '#888', fontSize: 15 },
-
-  // Uncounted product name (active session)
-  productNameUncounted: { color: '#444' },
-
-  // Count badge (replaces — on uncounted rows in active sessions)
-  countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fafafa',
-  },
-  countBadgeText: { fontSize: 13, color: '#999' },
-
-  // Toolbar: search + filter row
-  toolbar: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ececec',
-    gap: 8,
-  },
-  searchInput: {
-    height: 40,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: '#111',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
-  },
-  filterChipActive: {
-    backgroundColor: '#111',
-    borderColor: '#111',
-  },
-  filterChipText: { fontSize: 13, color: '#555' },
-  filterChipTextActive: { color: '#fff', fontWeight: '600' },
-  nextBtn: {
-    marginLeft: 'auto' as any,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f0f0f0',
-  },
-  nextBtnText: { fontSize: 13, fontWeight: '600', color: '#111' },
 
   // Export footer
   exportFooter: {
@@ -795,19 +735,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 16,
-    paddingBottom: 32,
-    backgroundColor: '#f5f5f5',
+    padding: 18,
+    paddingBottom: 36,
+    backgroundColor: theme.colors.background,
     borderTopWidth: 1,
-    borderTopColor: '#ececec',
+    borderTopColor: theme.colors.borderLight,
+    ...shadows.sm,
   },
-  exportBtn: {
-    height: 52,
-    backgroundColor: '#111',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exportBtnDisabled: { opacity: 0.4 },
-  exportBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

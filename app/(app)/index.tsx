@@ -5,18 +5,12 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Modal,
-  TextInput,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Keyboard,
-  Pressable,
-  Platform,
+  Linking,
 } from 'react-native';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Linking } from 'react-native';
 import { useCompanyId } from '@/lib/useCompanyId';
 import {
   getLocations,
@@ -27,6 +21,10 @@ import {
 import { signOut } from '@/services/auth';
 import { hasActiveSession } from '@/services/sessions';
 import { getCompanyJoinCode } from '@/services/companies';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { ModalSheet } from '@/components/ui/ModalSheet';
+import { theme, shadows } from '@/constants/theme';
 
 interface Location {
   id: string;
@@ -42,6 +40,7 @@ export default function LocationsScreen() {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (role === 'admin' && companyId) {
@@ -153,7 +152,7 @@ export default function LocationsScreen() {
   if (companyLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
   }
@@ -193,12 +192,14 @@ export default function LocationsScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator />
+          <ActivityIndicator color={theme.colors.primary} />
         </View>
       ) : locations.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.empty}>No locations yet.</Text>
-          <Text style={styles.emptySub}>Tap "+ New" to create your first location.</Text>
+          <Text style={styles.emptyTitle}>No locations yet</Text>
+          <Text style={styles.emptySub}>
+            {role === 'admin' ? 'Tap "+ New" to add your first location.' : 'No locations have been added.'}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -213,6 +214,7 @@ export default function LocationsScreen() {
               }
               onLongPress={role === 'admin' ? () => handleLocationActions(item) : undefined}
               delayLongPress={400}
+              activeOpacity={0.7}
             >
               <Text style={styles.rowText}>{item.name}</Text>
               {role === 'admin' && (
@@ -235,13 +237,15 @@ export default function LocationsScreen() {
           <Text style={styles.joinCodeValue}>{joinCode}</Text>
           <View style={styles.joinCodeActions}>
             <TouchableOpacity
-              style={styles.joinCodeBtn}
+              style={[styles.joinCodeBtn, copied && styles.joinCodeBtnCopied]}
               onPress={async () => {
                 await Clipboard.setStringAsync(joinCode);
-                Alert.alert('Copied', `Join code "${joinCode}" copied to clipboard.`);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
               }}
+              activeOpacity={0.75}
             >
-              <Text style={styles.joinCodeBtnText}>Copy code</Text>
+              <Text style={styles.joinCodeBtnText}>{copied ? 'Copied ✓' : 'Copy code'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.joinCodeBtn, styles.joinCodeBtnOutline]}
@@ -252,6 +256,7 @@ export default function LocationsScreen() {
                 );
                 Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
               }}
+              activeOpacity={0.75}
             >
               <Text style={[styles.joinCodeBtnText, styles.joinCodeBtnTextOutline]}>Send email</Text>
             </TouchableOpacity>
@@ -259,174 +264,121 @@ export default function LocationsScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+      <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
         <Text style={styles.signOutText}>Sign out</Text>
       </TouchableOpacity>
 
-      <Modal
+      <ModalSheet
         visible={showModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => { Keyboard.dismiss(); setShowModal(false); }}
+        onClose={() => setShowModal(false)}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <Pressable
-            style={styles.overlay}
-            onPress={() => { Keyboard.dismiss(); setShowModal(false); }}
-          >
-            <Pressable style={styles.sheet} onPress={() => {}}>
-              <Text style={styles.sheetTitle}>
-                {editingLocation ? 'Rename location' : 'New location'}
-              </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Location name"
-                value={name}
-                onChangeText={setName}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleSave}
-              />
-              <TouchableOpacity
-                style={[styles.button, (!name.trim() || saving) && styles.buttonDisabled]}
-                onPress={handleSave}
-                disabled={!name.trim() || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.buttonText}>Save</Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => { Keyboard.dismiss(); setShowModal(false); }}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+        <Text style={styles.sheetTitle}>
+          {editingLocation ? 'Rename location' : 'New location'}
+        </Text>
+        <Input
+          placeholder="Location name"
+          value={name}
+          onChangeText={setName}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={handleSave}
+        />
+        <Button
+          title="Save"
+          onPress={handleSave}
+          loading={saving}
+          disabled={!name.trim()}
+        />
+        <Button
+          title="Cancel"
+          onPress={() => setShowModal(false)}
+          variant="ghost"
+        />
+      </ModalSheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { padding: 16, gap: 10 },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  list: { padding: theme.spacing.lg, gap: 10, paddingBottom: 24 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    ...shadows.sm,
   },
-  rowText: { flex: 1, fontSize: 17, fontWeight: '500', color: '#111' },
-  moreBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  moreBtnText: { fontSize: 18, color: '#bbb', letterSpacing: 2 },
-  empty: { fontSize: 16, color: '#666', marginBottom: 6 },
-  emptySub: { fontSize: 14, color: '#aaa' },
-  errorTitle: { fontSize: 16, fontWeight: '600', color: '#c00', marginBottom: 8, textAlign: 'center' },
-  errorSub: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 4, paddingHorizontal: 32 },
-  headerBtn: { paddingHorizontal: 4 },
-  headerBtnText: { fontSize: 15, fontWeight: '600', color: '#111' },
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 16 },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-    marginBottom: 12,
-  },
-  button: {
-    height: 52,
-    backgroundColor: '#111',
-    borderRadius: 10,
+  rowText: { flex: 1, fontSize: 17, fontWeight: '600', color: theme.colors.text },
+  moreBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EFEFEC',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginLeft: 6,
   },
-  buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  cancelBtn: { alignItems: 'center', paddingVertical: 10 },
-  cancelText: { color: '#888', fontSize: 15 },
+  moreBtnText: { fontSize: 14, color: '#666666', letterSpacing: 1.5 },
+  emptyTitle: { fontSize: 17, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6 },
+  emptySub: { fontSize: 14, color: theme.colors.textLight, textAlign: 'center' },
+  errorTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.danger, marginBottom: 8, textAlign: 'center' },
+  errorSub: { fontSize: 13, color: theme.colors.textLight, textAlign: 'center', marginBottom: 4, paddingHorizontal: 32 },
+  headerBtn: { paddingHorizontal: 4 },
+  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 16 },
   signOutBtn: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#ececec',
-    backgroundColor: '#fff',
+    borderTopColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
   },
-  signOutText: { fontSize: 15, color: '#888' },
+  signOutText: { fontSize: 15, color: theme.colors.textLight, fontWeight: '500' },
   joinCodeCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    padding: 20,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    ...shadows.sm,
   },
   joinCodeLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#999',
+    color: theme.colors.textLight,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 10,
   },
   joinCodeValue: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
     letterSpacing: 8,
-    color: '#111',
+    color: theme.colors.text,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
-  joinCodeActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  joinCodeActions: { flexDirection: 'row', gap: 8 },
   joinCodeBtn: {
     flex: 1,
-    height: 40,
-    backgroundColor: '#111',
-    borderRadius: 8,
+    height: 42,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  joinCodeBtnCopied: {
+    backgroundColor: theme.colors.success,
+  },
   joinCodeBtnOutline: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
   },
-  joinCodeBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  joinCodeBtnTextOutline: {
-    color: '#555',
-  },
+  joinCodeBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  joinCodeBtnTextOutline: { color: theme.colors.textSecondary },
 });
