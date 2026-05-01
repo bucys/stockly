@@ -1,4 +1,4 @@
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, Text, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
 import { theme } from '@/constants/theme';
 
 interface ButtonProps {
@@ -22,8 +22,8 @@ export function Button({
 }: ButtonProps) {
   const isDisabled = disabled || loading;
   return (
-    <TouchableOpacity
-      style={[
+    <Pressable
+      style={({ pressed }) => [
         styles.base,
         size === 'lg' && styles.lg,
         size === 'md' && styles.md,
@@ -31,12 +31,12 @@ export function Button({
         variant === 'primary' && styles.primary,
         variant === 'outline' && styles.outline,
         variant === 'ghost' && styles.ghost,
+        pressed && !isDisabled && styles.pressed,
         isDisabled && variant !== 'ghost' && styles.disabled,
         style,
       ]}
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.82}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#fff' : theme.colors.primary} />
@@ -52,7 +52,7 @@ export function Button({
           {title}
         </Text>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -81,6 +81,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     marginBottom: 0,
   },
+  pressed: { opacity: 0.82 },
   disabled: { opacity: 0.38 },
   text: {
     color: '#fff',

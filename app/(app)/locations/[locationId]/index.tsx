@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCompanyId } from '@/lib/useCompanyId';
@@ -40,6 +41,10 @@ interface EditingProduct extends ProductRow {
 
 type ImportStep = 'select-location' | 'select-categories' | null;
 
+function normalize(s: string): string {
+  return s.trim().toLowerCase();
+}
+
 export default function LocationDetailScreen() {
   const { locationId, name } = useLocalSearchParams<{ locationId: string; name: string }>();
   const { companyId, role } = useCompanyId();
@@ -47,7 +52,7 @@ export default function LocationDetailScreen() {
   const [categories, setCategories] = useState<CategoryWithProducts[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Category modal
+  // Category rename modal (kept for admin housekeeping via long-press)
   const [showCatModal, setShowCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<{ id: string; name: string } | null>(null);
   const [catName, setCatName] = useState('');
@@ -56,7 +61,7 @@ export default function LocationDetailScreen() {
   // Product modal
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<EditingProduct | null>(null);
-  const [productCatId, setProductCatId] = useState('');
+  const [productCategoryText, setProductCategoryText] = useState('');
   const [productName, setProductName] = useState('');
   const [productUnit, setProductUnit] = useState('pcs');
   const [productLastQty, setProductLastQty] = useState('');
@@ -87,13 +92,7 @@ export default function LocationDetailScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // ── Category handlers ───────────────────────────────────────────────────────
-
-  function openCreateCategory() {
-    setEditingCat(null);
-    setCatName('');
-    setShowCatModal(true);
-  }
+  // ── Category rename/delete (long-press only) ─────────────────────────────────
 
   function openEditCategory(cat: { id: string; name: string }) {
     setEditingCat(cat);
@@ -102,14 +101,10 @@ export default function LocationDetailScreen() {
   }
 
   async function handleSaveCategory() {
-    if (!catName.trim() || !locationId) return;
+    if (!catName.trim() || !editingCat) return;
     setCatSaving(true);
     try {
-      if (editingCat) {
-        await updateCategory(editingCat.id, catName.trim());
-      } else {
-        await createCategory(locationId, catName.trim());
-      }
+      await updateCategory(editingCat.id, catName.trim());
       setShowCatModal(false);
       load();
     } catch {
@@ -152,9 +147,9 @@ export default function LocationDetailScreen() {
 
   // ── Product handlers ────────────────────────────────────────────────────────
 
-  function openCreateProduct(categoryId: string) {
+  function openCreateProduct(prefillCategoryName?: string) {
     setEditingProduct(null);
-    setProductCatId(categoryId);
+    setProductCategoryText(prefillCategoryName ?? '');
     setProductName('');
     setProductUnit('pcs');
     setProductLastQty('');
@@ -162,23 +157,45 @@ export default function LocationDetailScreen() {
   }
 
   function openEditProduct(product: ProductRow, categoryId: string) {
+    const cat = categories.find((c) => c.id === categoryId);
     setEditingProduct({ ...product, categoryId });
-    setProductCatId(categoryId);
+    setProductCategoryText(cat?.name ?? '');
     setProductName(product.name);
     setProductUnit(product.unit);
     setProductLastQty(product.last_known_quantity != null ? String(product.last_known_quantity) : '');
     setShowProductModal(true);
   }
 
+  async function resolveCategoryId(rawText: string): Promise<string | null> {
+    if (!locationId) return null;
+    const trimmed = rawText.trim();
+    if (!trimmed) return null;
+    const norm = normalize(trimmed);
+    const existing = categories.find((c) => normalize(c.name) === norm);
+    if (existing) return existing.id;
+    try {
+      const created = await createCategory(locationId, trimmed);
+      return (created as { id: string }).id;
+    } catch (err) {
+      console.error('[resolveCategoryId] createCategory failed:', err);
+      throw err;
+    }
+  }
+
   async function handleSaveProduct() {
-    if (!productName.trim() || !productCatId) return;
+    if (!productName.trim() || !productCategoryText.trim()) return;
     setProductSaving(true);
     const lastQty = productLastQty ? parseFloat(productLastQty) : undefined;
     try {
+      const categoryId = await resolveCategoryId(productCategoryText);
+      if (!categoryId) {
+        Alert.alert('Error', 'Could not resolve category.');
+        return;
+      }
       if (editingProduct) {
-        await updateProduct(editingProduct.id, productName.trim(), productUnit, lastQty, productCatId);
+        await updateProduct(editingProduct.id, productName.trim(), productUnit, lastQty, categoryId);
       } else {
-        await createProduct(productCatId, productName.trim(), productUnit, lastQty);
+        await createProduct(categoryId, productName.trim(), productUnit, lastQty);
       }
       setShowProductModal(false);
       load();
@@ -218,6 +235,21 @@ export default function LocationDetailScreen() {
     actions.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert(product.name, '', actions);
   }
+
+  // ── Category suggestions for product modal ──────────────────────────────────
+
+  const categorySuggestions = useMemo(() => {
+    const q = normalize(productCategoryText);
+    if (!q) {
+      return categories.slice(0, 6).map((c) => c.name);
+    }
+    const exact = categories.some((c) => normalize(c.name) === q);
+    if (exact) return [];
+    return categories
+      .filter((c) => normalize(c.name).includes(q))
+      .map((c) => c.name)
+      .slice(0, 6);
+  }, [productCategoryText, categories]);
 
   // ── Import handlers ─────────────────────────────────────────────────────────
 
@@ -270,7 +302,8 @@ export default function LocationDetailScreen() {
   function toggleCategoryId(catId: string) {
     setSelectedCatIds((prev) => {
       const next = new Set(prev);
-      next.has(catId) ? next.delete(catId) : next.add(catId);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
       return next;
     });
   }
@@ -334,17 +367,25 @@ export default function LocationDetailScreen() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  const isEmpty = !loading && categories.length === 0;
+  // Hide categories without products (per spec) but keep them in `categories`
+  // for category-suggestion matching and the rename/delete menu.
+  const visibleCategories = useMemo(
+    () => categories.filter((c) => c.products.length > 0),
+    [categories],
+  );
+
+  const isEmpty = !loading && visibleCategories.length === 0;
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           title: name ?? 'Location',
+          headerBackTitle: 'Back',
           headerRight: role === 'admin'
             ? () => (
-                <TouchableOpacity onPress={openCreateCategory} style={styles.headerBtn}>
-                  <Text style={styles.headerBtnText}>+ Category</Text>
+                <TouchableOpacity onPress={() => openCreateProduct()} style={styles.headerBtn}>
+                  <Text style={styles.headerBtnText}>+ Product</Text>
                 </TouchableOpacity>
               )
             : undefined,
@@ -357,59 +398,71 @@ export default function LocationDetailScreen() {
         </View>
       ) : isEmpty ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>No categories yet</Text>
+          <Text style={styles.emptyTitle}>No products yet</Text>
           <Text style={styles.emptySub}>
-            {role === 'admin' ? 'Tap "+ Category" to get started.' : 'No products set up yet.'}
+            {role === 'admin'
+              ? 'Add your first product — categories are created automatically as you type.'
+              : 'No products set up yet.'}
           </Text>
           {role === 'admin' && (
-            <TouchableOpacity style={styles.importEmptyBtn} onPress={openImport} activeOpacity={0.7}>
-              <Text style={styles.importEmptyBtnText}>Import from another location</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.primaryEmptyBtn}
+                onPress={() => openCreateProduct()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.primaryEmptyBtnText}>+ Add product</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.importEmptyBtn}
+                onPress={openImport}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.importEmptyBtnText}>Import from another location</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       ) : (
         <>
           <ScrollView contentContainerStyle={styles.scroll}>
-            {categories.map((cat) => (
+            {visibleCategories.map((cat) => (
               <View key={cat.id} style={styles.section}>
-                <View style={styles.categoryRow}>
-                  <Text style={styles.categoryName}>{cat.name}</Text>
-                  {role === 'admin' && (
-                    <TouchableOpacity
-                      style={styles.catMoreBtn}
-                      onPress={() => handleCategoryActions(cat)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Text style={styles.catMoreBtnText}>···</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={styles.addProductBtn}
-                    onPress={() => openCreateProduct(cat.id)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Text style={styles.addProductText}>+ Product</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.categoryRow}
+                  onLongPress={role === 'admin' ? () => handleCategoryActions(cat) : undefined}
+                  delayLongPress={400}
+                  activeOpacity={role === 'admin' ? 0.7 : 1}
+                >
+                  <Text style={styles.categoryName}>{cat.name.toUpperCase()}</Text>
+                  <Text style={styles.categoryCount}>
+                    {cat.products.length}
+                  </Text>
+                </TouchableOpacity>
 
-                {cat.products.length === 0 ? (
-                  <Text style={styles.noProducts}>No products — tap "+ Product" to add one.</Text>
-                ) : (
-                  cat.products.map((product) => (
-                    <TouchableOpacity
-                      key={product.id}
-                      style={styles.productRow}
-                      onPress={() => handleProductPress(product, cat.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.productName}>{product.name}</Text>
-                      <Text style={styles.productMeta}>
-                        {product.unit}
-                        {product.last_known_quantity != null ? ` · ${product.last_known_quantity}` : ''}
+                {cat.products.map((product) => (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={styles.productRow}
+                    onPress={() => handleProductPress(product, cat.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.productLeft}>
+                      <Text style={styles.productName} numberOfLines={1}>
+                        {product.name}
                       </Text>
-                    </TouchableOpacity>
-                  ))
-                )}
+                      <Text style={styles.productUnit}>{product.unit}</Text>
+                    </View>
+                    {product.last_known_quantity != null ? (
+                      <Text style={styles.productQty}>
+                        {product.last_known_quantity}
+                        <Text style={styles.productQtyUnit}> {product.unit}</Text>
+                      </Text>
+                    ) : (
+                      <Text style={styles.productQtyEmpty}>—</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
               </View>
             ))}
           </ScrollView>
@@ -422,14 +475,12 @@ export default function LocationDetailScreen() {
         </>
       )}
 
-      {/* ── Category modal ─────────────────────────────────────────────────── */}
+      {/* ── Category rename modal (admin housekeeping) ─────────────────────── */}
       <ModalSheet
         visible={showCatModal}
         onClose={() => setShowCatModal(false)}
       >
-        <Text style={styles.sheetTitle}>
-          {editingCat ? 'Rename category' : 'New category'}
-        </Text>
+        <Text style={styles.sheetTitle}>Rename category</Text>
         <Input
           placeholder="Category name"
           value={catName}
@@ -457,6 +508,7 @@ export default function LocationDetailScreen() {
         <Text style={styles.sheetTitle}>
           {editingProduct ? 'Edit product' : 'New product'}
         </Text>
+
         <Text style={styles.fieldLabel}>Name</Text>
         <Input
           placeholder="Product name"
@@ -464,20 +516,39 @@ export default function LocationDetailScreen() {
           onChangeText={setProductName}
           autoFocus
         />
+
         <Text style={styles.fieldLabel}>Category</Text>
-        <View style={styles.chipsWrap}>
-          {categories.map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[styles.chip, productCatId === cat.id && styles.chipSelected]}
-              onPress={() => setProductCatId(cat.id)}
-            >
-              <Text style={[styles.chipText, productCatId === cat.id && styles.chipTextSelected]}>
-                {cat.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <TextInput
+          style={styles.categoryInput}
+          placeholder="Type to find or create…"
+          placeholderTextColor={theme.colors.textPlaceholder}
+          value={productCategoryText}
+          onChangeText={setProductCategoryText}
+          autoCorrect={false}
+          autoCapitalize="words"
+          returnKeyType="done"
+        />
+        {categorySuggestions.length > 0 && (
+          <View style={styles.suggestionsWrap}>
+            {categorySuggestions.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={styles.suggestionChip}
+                onPress={() => setProductCategoryText(s)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.suggestionChipText}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {productCategoryText.trim() !== '' &&
+          !categories.some((c) => normalize(c.name) === normalize(productCategoryText)) && (
+            <Text style={styles.suggestionHint}>
+              Will create new category "{productCategoryText.trim()}"
+            </Text>
+          )}
+
         <Text style={styles.fieldLabel}>Unit</Text>
         <View style={styles.chipsWrap}>
           {UNITS.map((unit) => (
@@ -492,6 +563,7 @@ export default function LocationDetailScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
         <Text style={styles.fieldLabel}>Last known quantity (optional)</Text>
         <Input
           placeholder="e.g. 50"
@@ -499,11 +571,12 @@ export default function LocationDetailScreen() {
           onChangeText={setProductLastQty}
           keyboardType="decimal-pad"
         />
+
         <Button
           title="Save"
           onPress={handleSaveProduct}
           loading={productSaving}
-          disabled={!productName.trim() || !productCatId}
+          disabled={!productName.trim() || !productCategoryText.trim()}
         />
         <Button title="Cancel" onPress={() => setShowProductModal(false)} variant="ghost" />
       </ModalSheet>
@@ -515,7 +588,6 @@ export default function LocationDetailScreen() {
         avoidKeyboard={false}
         maxHeight="85%"
       >
-        {/* Step 1: source location picker */}
         {importStep === 'select-location' && (
           <>
             <Text style={styles.sheetTitle}>Import from location</Text>
@@ -550,7 +622,6 @@ export default function LocationDetailScreen() {
           </>
         )}
 
-        {/* Step 2: category selection + mode */}
         {importStep === 'select-categories' && (
           <>
             <TouchableOpacity
@@ -643,7 +714,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 11,
     backgroundColor: '#F2F2EF',
   },
   categoryName: {
@@ -651,52 +722,75 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  catMoreBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.07)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  catMoreBtnText: { fontSize: 13, color: '#555555', letterSpacing: 1.5 },
-  addProductBtn: { paddingVertical: 4, paddingLeft: 4 },
-  addProductText: { fontSize: 13, fontWeight: '600', color: theme.colors.textMuted },
-  noProducts: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 14,
-    color: theme.colors.textPlaceholder,
+  categoryCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
   },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 18,
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
   },
-  productName: { flex: 1, fontSize: 16, color: theme.colors.text, fontWeight: '400' },
-  productMeta: { fontSize: 13, color: theme.colors.textLight },
+  productLeft: { flex: 1, paddingRight: 12 },
+  productName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: theme.colors.text,
+  },
+  productUnit: {
+    fontSize: 12,
+    color: theme.colors.textLight,
+    marginTop: 2,
+  },
+  productQty: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  productQtyUnit: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.colors.textLight,
+  },
+  productQtyEmpty: {
+    fontSize: 16,
+    color: theme.colors.textPlaceholder,
+  },
 
   // Empty state
-  emptyTitle: { fontSize: 17, fontWeight: '600', color: theme.colors.textSecondary, marginBottom: 6 },
-  emptySub: { fontSize: 14, color: theme.colors.textLight, marginBottom: 24, textAlign: 'center' },
-  headerBtn: { paddingHorizontal: 4 },
-  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
-  importEmptyBtn: {
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text, marginBottom: 6 },
+  emptySub: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  primaryEmptyBtn: {
     paddingVertical: 14,
     paddingHorizontal: 28,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.primary,
+    marginBottom: 12,
+  },
+  primaryEmptyBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
+  headerBtn: { paddingHorizontal: 4 },
+  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.primary },
+  importEmptyBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: theme.radius.md,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
   },
-  importEmptyBtnText: { fontSize: 15, color: theme.colors.textSecondary, fontWeight: '600' },
+  importEmptyBtnText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
   importFooterBtn: {
     position: 'absolute',
     bottom: 0,
@@ -733,6 +827,44 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipText: { fontSize: 14, color: theme.colors.textSecondary },
   chipTextSelected: { color: '#fff', fontWeight: '600' },
+
+  // Category text input + suggestions
+  categoryInput: {
+    height: 48,
+    borderRadius: theme.radius.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  suggestionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  suggestionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  suggestionChipText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  suggestionHint: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginBottom: 18,
+    fontStyle: 'italic',
+  },
 
   // Import modal
   importList: { maxHeight: 280, marginBottom: 8 },

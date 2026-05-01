@@ -26,7 +26,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signIn(email.trim(), password);
-      router.replace('/(app)');
+      router.replace('/');
     } catch (err: unknown) {
       Alert.alert('Sign in failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -35,9 +35,9 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
@@ -45,44 +45,41 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Back button */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>‹ Back</Text>
-          </TouchableOpacity>
-
-          {/* Header */}
           <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Text style={styles.backBtnText}>‹ Back</Text>
+            </TouchableOpacity>
             <Text style={styles.title}>Welcome back</Text>
             <Text style={styles.subtitle}>Sign in to your account</Text>
           </View>
 
-          {/* Form */}
-          <View style={styles.form}>
-            <Text style={styles.label}>EMAIL</Text>
-            <Input
-              placeholder="you@company.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              returnKeyType="next"
-            />
+          <View style={styles.content}>
+            <View style={styles.form}>
+              <Text style={styles.label}>EMAIL</Text>
+              <Input
+                placeholder="you@company.com"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>PASSWORD</Text>
-            <Input
-              placeholder="Your password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete="current-password"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
+              <Text style={styles.label}>PASSWORD</Text>
+              <Input
+                placeholder="Your password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoComplete="current-password"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+            </View>
           </View>
 
-          {/* Actions */}
-          <View style={styles.actions}>
+          <View style={styles.footer}>
             <Button
               title="Sign in"
               onPress={handleLogin}
@@ -106,12 +103,15 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  flex: { flex: 1 },
+  root: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 12,
+    paddingTop: 24,
     paddingBottom: 32,
+  },
+  header: {
+    marginBottom: 36,
   },
   backBtn: {
     alignSelf: 'flex-start',
@@ -122,9 +122,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.textMuted,
     fontWeight: '500',
-  },
-  header: {
-    marginBottom: 36,
   },
   title: {
     fontSize: 32,
@@ -140,6 +137,9 @@ const styles = StyleSheet.create({
   form: {
     gap: 2,
   },
+  content: {
+    flexGrow: 1,
+  },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 6,
   },
-  actions: {
+  footer: {
     marginTop: 28,
     gap: 6,
   },

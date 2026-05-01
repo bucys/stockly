@@ -31,7 +31,7 @@ export default function RootLayout() {
       router.replace('/(auth)/welcome');
     } else if (session && inAuthGroup) {
       console.log('[RootLayout] session present — redirecting to app');
-      router.replace('/(app)/(tabs)');
+      router.replace('/');
     }
   }, [session, loading, segments]);
 

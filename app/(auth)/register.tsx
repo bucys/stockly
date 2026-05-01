@@ -49,9 +49,9 @@ export default function RegisterScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
@@ -59,56 +59,56 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>‹ Back</Text>
-          </TouchableOpacity>
-
           <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Text style={styles.backBtnText}>‹ Back</Text>
+            </TouchableOpacity>
             <Text style={styles.title}>Create company</Text>
             <Text style={styles.subtitle}>Set up your workspace in seconds</Text>
           </View>
 
-          <View style={styles.form}>
-            <Text style={styles.label}>COMPANY NAME</Text>
-            <Input
-              placeholder="e.g. Acme Warehouse"
-              value={companyName}
-              onChangeText={setCompanyName}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
+          <View style={styles.content}>
+            <View style={styles.form}>
+              <Text style={styles.label}>COMPANY NAME</Text>
+              <Input
+                placeholder="e.g. Acme Warehouse"
+                value={companyName}
+                onChangeText={setCompanyName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>YOUR EMAIL</Text>
-            <Input
-              placeholder="you@company.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              returnKeyType="next"
-            />
+              <Text style={styles.label}>YOUR EMAIL</Text>
+              <Input
+                placeholder="you@company.com"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                returnKeyType="next"
+              />
 
-            <Text style={styles.label}>PASSWORD</Text>
-            <Input
-              placeholder="Min 6 characters"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete="new-password"
-              returnKeyType="done"
-              onSubmitEditing={handleRegister}
-            />
+              <Text style={styles.label}>PASSWORD</Text>
+              <Input
+                placeholder="Min 6 characters"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoComplete="new-password"
+                returnKeyType="done"
+                onSubmitEditing={handleRegister}
+              />
+            </View>
+
+            <View style={styles.hint}>
+              <Text style={styles.hintText}>
+                You'll get a <Text style={styles.hintBold}>join code</Text> to share with your team after setup.
+              </Text>
+            </View>
           </View>
 
-          {/* Info hint */}
-          <View style={styles.hint}>
-            <Text style={styles.hintText}>
-              You'll get a <Text style={styles.hintBold}>join code</Text> to share with your team after setup.
-            </Text>
-          </View>
-
-          <View style={styles.actions}>
+          <View style={styles.footer}>
             <Button
               title="Create workspace"
               onPress={handleRegister}
@@ -123,14 +123,15 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  flex: { flex: 1 },
+  safe: { flex: 1, backgroundColor: theme.colors.background },
+  root: { flex: 1 },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 56,
+    paddingTop: 24,
     paddingBottom: 40,
   },
+  header: { marginBottom: 36 },
   backBtn: {
     alignSelf: 'flex-start',
     paddingVertical: 8,
@@ -141,7 +142,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontWeight: '500',
   },
-  header: { marginBottom: 36 },
   title: {
     fontSize: 32,
     fontWeight: '800',
@@ -154,6 +154,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
   form: { gap: 2 },
+  content: { flexGrow: 1 },
   label: {
     fontSize: 11,
     fontWeight: '700',
@@ -174,5 +175,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   hintBold: { fontWeight: '700', color: theme.colors.text },
-  actions: { gap: 6 },
+  footer: { gap: 6 },
 });

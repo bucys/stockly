@@ -14,6 +14,9 @@ export default function AppLayout() {
     >
       {/* Tab screens manage their own header via the Tabs navigator */}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="locations/[locationId]/index" />
+      <Stack.Screen name="locations/[locationId]/sessions/index" />
+      <Stack.Screen name="locations/[locationId]/sessions/[sessionId]" />
     </Stack>
   );
 }

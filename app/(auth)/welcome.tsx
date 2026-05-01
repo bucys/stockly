@@ -24,28 +24,30 @@ function LogoMark() {
 export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      {/* Hero — fills all available space above footer */}
-      <View style={styles.hero}>
-        <LogoMark />
-        <Text style={styles.appName}>Stockly</Text>
-        <Text style={styles.tagline}>
-          Fast, simple inventory counting{'\n'}for your team.
-        </Text>
-      </View>
+      <View style={styles.root}>
+        <View style={styles.header} />
 
-      {/* Footer — buttons always at bottom, no gap property */}
-      <View style={styles.footer}>
-        <Button
-          title="Get started"
-          onPress={() => router.push('/(auth)/login')}
-          style={styles.footerBtn}
-        />
-        <Button
-          title="I have a join code"
-          variant="outline"
-          onPress={() => router.push('/(auth)/join')}
-          style={styles.footerBtnLast}
-        />
+        <View style={styles.content}>
+          <LogoMark />
+          <Text style={styles.appName}>Stockly</Text>
+          <Text style={styles.tagline}>
+            Fast, simple inventory counting{'\n'}for your team.
+          </Text>
+        </View>
+
+        <View style={styles.footer}>
+          <Button
+            title="Get started"
+            onPress={() => router.push('/(auth)/login')}
+            style={styles.footerBtn}
+          />
+          <Button
+            title="I have a join code"
+            variant="outline"
+            onPress={() => router.push('/(auth)/join')}
+            style={styles.footerBtnLast}
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -56,7 +58,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  hero: {
+  root: {
+    flex: 1,
+  },
+  header: {
+    minHeight: 24,
+  },
+  content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -99,12 +107,12 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: 28,
-    paddingBottom: 8,
+    paddingBottom: 16,
   },
   footerBtn: {
     marginBottom: 12,
   },
   footerBtnLast: {
-    marginBottom: 0,
+    marginBottom: 24,
   },
 });

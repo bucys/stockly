@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompanyId } from '@/lib/useCompanyId';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -40,6 +42,7 @@ interface ProductWithCount {
 }
 
 interface Section {
+  id: string;
   title: string;
   data: ProductWithCount[];
 }
@@ -54,11 +57,20 @@ function formatTime(iso: string): string {
   return isToday ? `Today at ${time}` : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${time}`;
 }
 
+function isValidQty(v: string): boolean {
+  if (!v.trim()) return false;
+  const n = Number(v);
+  if (!isFinite(n) || n < 0) return false;
+  if (v.endsWith('.')) return false;
+  return true;
+}
+
 function buildSections(
   categories: CategoryWithProducts[],
   countsMap: Map<string, CountRow>,
 ): Section[] {
   return categories.map((cat) => ({
+    id: cat.id,
     title: cat.name,
     data: cat.products.map((p) => ({
       id: p.id,
@@ -80,6 +92,7 @@ export default function CountingScreen() {
   }>();
 
   const { role } = useCompanyId();
+  const insets = useSafeAreaInsets();
 
   const [sections, setSections] = useState<Section[]>([]);
   const [countsMap, setCountsMap] = useState<Map<string, CountRow>>(new Map());
@@ -92,12 +105,12 @@ export default function CountingScreen() {
   // Search + filter
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterTab>('all');
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   // Modal state
   const [selected, setSelected] = useState<ProductWithCount | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [saving, setSaving] = useState(false);
-  const inputRef = useRef<TextInput>(null);
 
   // Load current user id once
   useEffect(() => {
@@ -123,7 +136,14 @@ export default function CountingScreen() {
 
       const map = new Map<string, CountRow>(counts.map((c) => [c.product_id, c]));
       setCountsMap(map);
-      setSections(buildSections(categories, map));
+      const built = buildSections(categories, map);
+      setSections(built);
+      // Default: collapse every category so the user can drill in deliberately.
+      // Preserve any categories the user has explicitly expanded across reloads.
+      setCollapsedIds((prev) => {
+        if (prev.size > 0) return prev;
+        return new Set(built.map((s) => s.id));
+      });
       if (sessionRows?.status) setSessionStatus(sessionRows.status as Session['status']);
       if (sessionRows?.created_at) {
         setSessionCreatedAt(sessionRows.created_at);
@@ -233,6 +253,24 @@ export default function CountingScreen() {
       .filter((sec) => sec.data.length > 0);
   }, [sections, search, filter]);
 
+  // Hide products inside collapsed categories without removing the section header
+  const displaySections = useMemo<Section[]>(
+    () =>
+      filteredSections.map((sec) =>
+        collapsedIds.has(sec.id) ? { ...sec, data: [] as ProductWithCount[] } : sec,
+      ),
+    [filteredSections, collapsedIds],
+  );
+
+  function toggleCategory(id: string) {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   // ── Next uncounted ────────────────────────────────────────────────────────
 
   function handleNextUncounted() {
@@ -249,7 +287,20 @@ export default function CountingScreen() {
     if (sessionStatus === 'completed') return;
     setSelected(product);
     setInputValue(product.count !== null ? String(product.count.quantity) : '');
-    setTimeout(() => inputRef.current?.focus(), 150);
+  }
+
+  function handleNumpadKey(key: string) {
+    setInputValue((prev) => {
+      if (key === 'back') return prev.slice(0, -1);
+      if (key === '.') {
+        if (prev.includes('.')) return prev;
+        return prev === '' ? '0.' : `${prev}.`;
+      }
+      // digit
+      if (prev.length >= 8) return prev;
+      if (prev === '0') return key;
+      return `${prev}${key}`;
+    });
   }
 
   function closeModal() {
@@ -380,18 +431,22 @@ export default function CountingScreen() {
         onPress={() => openProduct(item)}
         activeOpacity={sessionStatus === 'completed' ? 1 : 0.65}
       >
-        <Text style={[styles.productName, !isCounted && sessionStatus === 'active' && styles.productNameUncounted]}>
+        {isCounted ? (
+          <View style={styles.statusIconCounted}>
+            <Ionicons name="checkmark" size={14} color="#fff" />
+          </View>
+        ) : (
+          <View style={styles.statusIconUncounted} />
+        )}
+        <Text style={styles.productName} numberOfLines={1}>
           {item.name}
         </Text>
         {isCounted ? (
-          <View style={styles.countedRight}>
-            <Text style={styles.checkmark}>✓</Text>
-            <Text style={styles.countedValue}>{item.count!.quantity} {item.unit}</Text>
-          </View>
+          <Text style={styles.countedValue}>
+            {item.count!.quantity} {item.unit}
+          </Text>
         ) : sessionStatus === 'active' ? (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>Count</Text>
-          </View>
+          <Text style={styles.tapToCount}>Tap to count</Text>
         ) : (
           <Text style={styles.emptyMark}>—</Text>
         )}
@@ -400,45 +455,67 @@ export default function CountingScreen() {
   }
 
   function renderSectionHeader({ section }: { section: Section }) {
+    const collapsed = collapsedIds.has(section.id);
+    const sectionTotal = sections.find((s) => s.id === section.id)?.data.length ?? 0;
+    const sectionCounted =
+      sections.find((s) => s.id === section.id)?.data.filter((p) => p.count !== null).length ?? 0;
     return (
-      <View style={styles.sectionHeader}>
+      <TouchableOpacity
+        style={styles.sectionHeader}
+        onPress={() => toggleCategory(section.id)}
+        activeOpacity={0.6}
+      >
         <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
-      </View>
+        <Text style={styles.sectionMeta}>
+          {sectionCounted}/{sectionTotal} counted
+        </Text>
+        <Ionicons
+          name={collapsed ? 'chevron-forward' : 'chevron-down'}
+          size={14}
+          color={theme.colors.textLight}
+          style={styles.sectionChevron}
+        />
+      </TouchableOpacity>
     );
   }
 
   // ── Main render ───────────────────────────────────────────────────────────
 
   const isCompleted = sessionStatus === 'completed';
-  const progressColor = pct === 100 ? theme.colors.success : theme.colors.primary;
+  const progressColor = pct === 100 ? theme.colors.success : '#2563EB';
+  const progressTrackColor = pct === 100 ? '#E6F4EA' : '#EEF4FF';
+  const sessionDateLabel = sessionCreatedAt ? formatTime(sessionCreatedAt) : null;
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           title: locationName ?? 'Inventory',
+          headerBackTitle: 'Back',
           headerRight: isCompleted
             ? () => (
                 <View style={styles.completedBadge}>
                   <Text style={styles.completedBadgeText}>Completed ✓</Text>
                 </View>
               )
-            : () => (
-                <TouchableOpacity onPress={handleComplete} style={styles.headerBtn}>
-                  <Text style={styles.headerBtnText}>Complete</Text>
-                </TouchableOpacity>
-              ),
+            : undefined,
         }}
       />
 
-      {/* Progress bar */}
+      {/* Header progress */}
       <View style={styles.progressContainer}>
-        <View style={styles.progressTrack}>
+        {sessionDateLabel ? (
+          <Text style={styles.progressSubtitle}>{sessionDateLabel}</Text>
+        ) : null}
+        <View style={styles.progressMetaRow}>
+          <Text style={styles.progressMetaText}>
+            {counted} of {total} counted
+          </Text>
+          <Text style={[styles.progressPct, { color: progressColor }]}>{pct}%</Text>
+        </View>
+        <View style={[styles.progressTrack, { backgroundColor: progressTrackColor }]}>
           <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: progressColor }]} />
         </View>
-        <Text style={styles.progressText}>
-          {counted} / {total} counted · {pct}%
-        </Text>
       </View>
 
       {/* Search + filter toolbar */}
@@ -494,19 +571,36 @@ export default function CountingScreen() {
         </View>
       ) : (
         <SectionList
-          sections={filteredSections}
+          sections={displaySections}
           keyExtractor={(item) => item.id}
           renderItem={renderProduct}
           renderSectionHeader={renderSectionHeader}
           stickySectionHeadersEnabled={false}
-          contentContainerStyle={[styles.list, isCompleted && styles.listWithFooter]}
+          contentContainerStyle={[
+            styles.list,
+            (isCompleted || !isCompleted) && styles.listWithFooter,
+          ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           keyboardShouldPersistTaps="handled"
         />
       )}
 
+      {!isCompleted && !loading && sections.length > 0 && (
+        <View style={[styles.bottomFooter, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
+          <TouchableOpacity
+            style={styles.finishBtn}
+            onPress={handleComplete}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.finishBtnText}>
+              Finish session ({counted}/{total})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isCompleted && !loading && role === 'admin' && (
-        <View style={styles.exportFooter}>
+        <View style={[styles.exportFooter, { paddingBottom: Math.max(insets.bottom, 16) + 16 }]}>
           <Button
             title="Export CSV"
             onPress={handleExport}
@@ -520,6 +614,7 @@ export default function CountingScreen() {
       <ModalSheet
         visible={selected !== null}
         onClose={closeModal}
+        avoidKeyboard={false}
       >
         <Text style={styles.sheetProductName}>{selected?.name}</Text>
 
@@ -536,30 +631,40 @@ export default function CountingScreen() {
           </View>
         )}
 
-        <View style={styles.inputRow}>
-          <TextInput
-            ref={inputRef}
-            style={styles.quantityInput}
-            value={inputValue}
-            onChangeText={setInputValue}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor="#CCC"
-            returnKeyType="done"
-            onSubmitEditing={handleSave}
-            selectTextOnFocus
-          />
-          <Text style={styles.unitLabel}>{selected?.unit}</Text>
+        <View style={styles.numpadDisplay}>
+          <Text
+            style={[
+              styles.numpadValue,
+              inputValue === '' && styles.numpadValuePlaceholder,
+            ]}
+            numberOfLines={1}
+          >
+            {inputValue === '' ? '0' : inputValue}
+          </Text>
+          <Text style={styles.numpadUnit}>{selected?.unit}</Text>
         </View>
 
-        <Button
-          title="Save"
+        <Numpad onKey={handleNumpadKey} disabled={saving} />
+
+        <TouchableOpacity
+          style={[
+            styles.numpadSaveBtn,
+            (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+          ]}
           onPress={handleSave}
-          loading={saving}
-          disabled={!inputValue.trim()}
-          style={{ height: 58, borderRadius: theme.radius.lg }}
-        />
-        <Button title="Cancel" onPress={closeModal} variant="ghost" />
+          disabled={!isValidQty(inputValue) || saving}
+          activeOpacity={0.85}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.numpadSaveBtnText}>
+              {isValidQty(inputValue)
+                ? `Save — ${inputValue} ${selected?.unit ?? ''}`.trim()
+                : 'Save'}
+            </Text>
+          )}
+        </TouchableOpacity>
       </ModalSheet>
     </View>
   );
@@ -584,16 +689,35 @@ const styles = StyleSheet.create({
   progressContainer: {
     backgroundColor: theme.colors.surface,
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
   },
+  progressSubtitle: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginBottom: 8,
+  },
+  progressMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressMetaText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    fontWeight: '500',
+  },
+  progressPct: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
   progressTrack: {
     height: 8,
-    backgroundColor: theme.colors.borderLight,
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
@@ -603,34 +727,62 @@ const styles = StyleSheet.create({
 
   // List
   list: { paddingBottom: 32 },
-  listWithFooter: { paddingBottom: 108 },
+  listWithFooter: { paddingBottom: 140 },
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 18,
     paddingTop: 22,
     paddingBottom: 8,
     backgroundColor: theme.colors.background,
   },
   sectionTitle: {
-    fontSize: 11,
+    flex: 1,
+    fontSize: 12,
     fontWeight: '700',
-    color: theme.colors.textLight,
+    color: theme.colors.textSecondary,
     letterSpacing: 1.2,
   },
+  sectionMeta: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+    marginRight: 8,
+  },
+  sectionChevron: { marginLeft: 0 },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
     paddingHorizontal: 18,
-    paddingVertical: 20,
-    minHeight: 60,
+    paddingVertical: 14,
+    minHeight: 52,
+    gap: 12,
   },
-  productName: { flex: 1, fontSize: 16, color: theme.colors.text },
+  statusIconCounted: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: theme.colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusIconUncounted: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: 'transparent',
+  },
+  productName: { flex: 1, fontSize: 15, color: theme.colors.text, fontWeight: '500' },
   productNameUncounted: { color: theme.colors.textSecondary },
   countedRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   checkmark: { fontSize: 14, color: theme.colors.success, fontWeight: '700' },
-  countedValue: { fontSize: 15, fontWeight: '600', color: theme.colors.success },
+  countedValue: { fontSize: 14, fontWeight: '600', color: theme.colors.success },
+  tapToCount: { fontSize: 13, color: theme.colors.textLight, fontWeight: '500' },
   emptyMark: { fontSize: 18, color: '#CCC' },
-  separator: { height: 1, backgroundColor: theme.colors.borderLight, marginLeft: 18 },
+  separator: { height: 1, backgroundColor: theme.colors.borderLight, marginLeft: 50 },
   countBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -729,6 +881,32 @@ const styles = StyleSheet.create({
     minWidth: 44,
   },
 
+  // Bottom finish button
+  bottomFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    paddingBottom: 28,
+    backgroundColor: theme.colors.background,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+  },
+  finishBtn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 16,
+    alignItems: 'center',
+    ...shadows.sm,
+  },
+  finishBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+
   // Export footer
   exportFooter: {
     position: 'absolute',
@@ -742,4 +920,133 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.borderLight,
     ...shadows.sm,
   },
+
+  // Numpad
+  numpadDisplay: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 18,
+    marginBottom: 12,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background,
+  },
+  numpadValue: {
+    fontSize: 44,
+    fontWeight: '700',
+    color: theme.colors.text,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  numpadValuePlaceholder: {
+    color: theme.colors.textPlaceholder,
+  },
+  numpadUnit: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+  },
+  numpadGrid: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  numpadRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  numpadKey: {
+    flex: 1,
+    height: 56,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numpadKeyPressed: {
+    backgroundColor: theme.colors.borderLight,
+  },
+  numpadKeyText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  numpadKeyTextSecondary: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  numpadSaveBtn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  numpadSaveBtnDisabled: {
+    backgroundColor: '#C4BAB2',
+  },
+  numpadSaveBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
 });
+
+// ─── Numpad ───────────────────────────────────────────────────────────────────
+
+interface NumpadProps {
+  onKey: (key: string) => void;
+  disabled?: boolean;
+}
+
+const NUMPAD_ROWS: Array<Array<{ key: string; label: string; secondary?: boolean }>> = [
+  [
+    { key: '1', label: '1' },
+    { key: '2', label: '2' },
+    { key: '3', label: '3' },
+  ],
+  [
+    { key: '4', label: '4' },
+    { key: '5', label: '5' },
+    { key: '6', label: '6' },
+  ],
+  [
+    { key: '7', label: '7' },
+    { key: '8', label: '8' },
+    { key: '9', label: '9' },
+  ],
+  [
+    { key: '.', label: '.' },
+    { key: '0', label: '0' },
+    { key: 'back', label: '⌫', secondary: true },
+  ],
+];
+
+function Numpad({ onKey, disabled }: NumpadProps) {
+  return (
+    <View style={styles.numpadGrid}>
+      {NUMPAD_ROWS.map((row, ri) => (
+        <View key={ri} style={styles.numpadRow}>
+          {row.map((cell) => (
+            <TouchableOpacity
+              key={cell.key}
+              style={styles.numpadKey}
+              onPress={() => onKey(cell.key)}
+              disabled={disabled}
+              activeOpacity={0.6}
+            >
+              <Text
+                style={cell.secondary ? styles.numpadKeyTextSecondary : styles.numpadKeyText}
+              >
+                {cell.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}

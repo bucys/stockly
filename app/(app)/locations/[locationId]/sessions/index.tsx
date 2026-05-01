@@ -108,6 +108,7 @@ export default function SessionsScreen() {
       <Stack.Screen
         options={{
           title: name ?? 'Sessions',
+          headerBackTitle: 'Back',
           headerRight: () => (
             <TouchableOpacity
               onPress={() => router.push(`/locations/${locationId}?name=${encodeURIComponent(name ?? '')}`)}
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
   continueBtnText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: theme.colors.primaryDark,
     letterSpacing: 0.1,
   },
 
