@@ -1,10 +1,16 @@
 import { supabase } from '@/lib/supabase';
 
-export async function getLocations(companyId: string) {
+export interface Location {
+  id: string;
+  name: string;
+  address: string | null;
+}
+
+export async function getLocations(companyId: string): Promise<Location[]> {
   console.log('[getLocations] fetching for company_id:', companyId);
   const { data, error } = await supabase
     .from('locations')
-    .select('id, name')
+    .select('id, name, address')
     .eq('company_id', companyId)
     .order('name');
   if (error) {
@@ -12,33 +18,41 @@ export async function getLocations(companyId: string) {
     throw error;
   }
   console.log('[getLocations] result count:', data?.length ?? 0);
-  return data as { id: string; name: string }[];
+  return data as Location[];
 }
 
-export async function createLocation(companyId: string, name: string) {
-  console.log('[createLocation] payload:', { company_id: companyId, name });
+export async function createLocation(
+  companyId: string,
+  name: string,
+  address?: string,
+): Promise<Location> {
+  console.log('[createLocation] payload:', { company_id: companyId, name, address });
   const { data, error } = await supabase
     .from('locations')
-    .insert({ company_id: companyId, name })
-    .select()
+    .insert({ company_id: companyId, name, address: address?.trim() || null })
+    .select('id, name, address')
     .single();
   if (error) {
     console.error('[createLocation] error:', error.message, 'code:', error.code, 'hint:', error.hint, error);
     throw new Error(`Location creation failed: ${error.message} (code: ${error.code})`);
   }
   console.log('[createLocation] success, id:', data.id);
-  return data as { id: string; name: string };
+  return data as Location;
 }
 
-export async function updateLocation(id: string, name: string) {
+export async function updateLocation(
+  id: string,
+  name: string,
+  address?: string,
+): Promise<void> {
   const { error } = await supabase
     .from('locations')
-    .update({ name })
+    .update({ name, address: address?.trim() || null })
     .eq('id', id);
   if (error) throw error;
 }
 
-export async function deleteLocation(id: string) {
+export async function deleteLocation(id: string): Promise<void> {
   const { error } = await supabase
     .from('locations')
     .delete()

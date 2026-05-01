@@ -13,8 +13,8 @@ export function Input({ style, ...props }: TextInputProps) {
 
 const styles = StyleSheet.create({
   input: {
-    height: 56,
-    borderWidth: 1.5,
+    height: 52,
+    borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.lg,

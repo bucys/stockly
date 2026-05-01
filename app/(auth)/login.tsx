@@ -2,11 +2,14 @@ import { useState } from 'react';
 import {
   View,
   Text,
+  TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { signIn } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
@@ -25,100 +28,106 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
       router.replace('/(app)');
     } catch (err: unknown) {
-      Alert.alert('Login failed', err instanceof Error ? err.message : 'Unknown error');
+      Alert.alert('Sign in failed', err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.inner}>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>IT</Text>
-        </View>
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Back button */}
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.title}>Inventory Tracker</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Sign in to your account</Text>
+          </View>
 
-        <Input
-          placeholder="Email address"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          style={styles.inputSpacing}
-        />
-        <Input
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="current-password"
-          style={styles.inputSpacing}
-        />
+          {/* Form */}
+          <View style={styles.form}>
+            <Text style={styles.label}>EMAIL</Text>
+            <Input
+              placeholder="you@company.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              returnKeyType="next"
+            />
 
-        <Button
-          title="Sign In"
-          onPress={handleLogin}
-          loading={loading}
-          style={styles.primaryBtn}
-        />
+            <Text style={styles.label}>PASSWORD</Text>
+            <Input
+              placeholder="Your password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="current-password"
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+            />
+          </View>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>New to Inventory Tracker?</Text>
-          <View style={styles.divider} />
-        </View>
-
-        <Button
-          title="Create company account"
-          onPress={() => router.push('/(auth)/register')}
-          variant="outline"
-        />
-        <Button
-          title="Join with a code"
-          onPress={() => router.push('/(auth)/join')}
-          variant="outline"
-          style={{ marginBottom: 0 }}
-        />
-      </View>
-    </KeyboardAvoidingView>
+          {/* Actions */}
+          <View style={styles.actions}>
+            <Button
+              title="Sign in"
+              onPress={handleLogin}
+              loading={loading}
+            />
+            <TouchableOpacity
+              style={styles.secondaryLink}
+              onPress={() => router.push('/(auth)/register')}
+            >
+              <Text style={styles.secondaryLinkText}>
+                No account?{' '}
+                <Text style={styles.secondaryLinkBold}>Create company</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-  },
-  inner: {
-    flex: 1,
+  safe: { flex: 1, backgroundColor: theme.colors.background },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
     paddingHorizontal: 28,
-    justifyContent: 'center',
-    paddingBottom: 24,
+    paddingTop: 12,
+    paddingBottom: 32,
   },
-  logoMark: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    marginBottom: 20,
   },
-  logoMarkText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.5,
+  backBtnText: {
+    fontSize: 16,
+    color: theme.colors.textMuted,
+    fontWeight: '500',
+  },
+  header: {
+    marginBottom: 36,
   },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '800',
     color: theme.colors.text,
     letterSpacing: -0.5,
@@ -127,28 +136,31 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: theme.colors.textMuted,
-    marginBottom: 36,
   },
-  inputSpacing: {
-    marginBottom: 12,
+  form: {
+    gap: 2,
   },
-  primaryBtn: {
-    marginTop: 8,
-    marginBottom: 0,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-    gap: 12,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.borderLight,
-  },
-  dividerText: {
-    fontSize: 13,
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
     color: theme.colors.textLight,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  actions: {
+    marginTop: 28,
+    gap: 6,
+  },
+  secondaryLink: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  secondaryLinkText: {
+    fontSize: 15,
+    color: theme.colors.textMuted,
+  },
+  secondaryLinkBold: {
+    fontWeight: '700',
+    color: theme.colors.text,
   },
 });

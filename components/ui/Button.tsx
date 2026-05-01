@@ -7,7 +7,7 @@ interface ButtonProps {
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'outline' | 'ghost';
-  size?: 'md' | 'sm';
+  size?: 'lg' | 'md' | 'sm';
   style?: ViewStyle;
 }
 
@@ -17,7 +17,7 @@ export function Button({
   loading,
   disabled,
   variant = 'primary',
-  size = 'md',
+  size = 'lg',
   style,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
@@ -25,6 +25,8 @@ export function Button({
     <TouchableOpacity
       style={[
         styles.base,
+        size === 'lg' && styles.lg,
+        size === 'md' && styles.md,
         size === 'sm' && styles.sm,
         variant === 'primary' && styles.primary,
         variant === 'outline' && styles.outline,
@@ -34,7 +36,7 @@ export function Button({
       ]}
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.75}
+      activeOpacity={0.82}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#fff' : theme.colors.primary} />
@@ -56,16 +58,14 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    height: 56,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
   },
-  sm: {
-    height: 42,
-    borderRadius: theme.radius.sm,
-  },
+  lg: { height: 56, paddingHorizontal: theme.spacing.xl },
+  md: { height: 48, paddingHorizontal: theme.spacing.lg },
+  sm: { height: 38, paddingHorizontal: theme.spacing.md },
   primary: {
     backgroundColor: theme.colors.primary,
   },
@@ -76,30 +76,23 @@ const styles = StyleSheet.create({
   },
   ghost: {
     height: undefined,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 0,
     backgroundColor: 'transparent',
     marginBottom: 0,
   },
-  disabled: {
-    opacity: 0.38,
-  },
+  disabled: { opacity: 0.38 },
   text: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  textSm: {
-    fontSize: 14,
     fontWeight: '600',
+    letterSpacing: 0.1,
   },
-  textOutline: {
-    color: theme.colors.text,
-  },
+  textSm: { fontSize: 14 },
+  textOutline: { color: theme.colors.text },
   textGhost: {
     color: theme.colors.textMuted,
     fontSize: 15,
     fontWeight: '500',
-    letterSpacing: 0,
   },
 });

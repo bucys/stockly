@@ -28,10 +28,10 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === '(auth)';
     if (!session && !inAuthGroup) {
       console.log('[RootLayout] no session — redirecting to login');
-      router.replace('/(auth)/login');
+      router.replace('/(auth)/welcome');
     } else if (session && inAuthGroup) {
       console.log('[RootLayout] session present — redirecting to app');
-      router.replace('/(app)');
+      router.replace('/(app)/(tabs)');
     }
   }, [session, loading, segments]);
 

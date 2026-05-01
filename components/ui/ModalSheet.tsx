@@ -50,11 +50,7 @@ export function ModalSheet({
 
   const sheet = (
     <Pressable
-      style={[
-        styles.sheetBase,
-        maxHeight ? { maxHeight } : undefined,
-        sheetStyle,
-      ]}
+      style={[styles.sheetBase, maxHeight ? { maxHeight } : undefined, sheetStyle]}
       onPress={() => {}}
     >
       <View style={styles.handle} />
@@ -91,30 +87,30 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: theme.colors.backdrop,
   },
   sheetBase: {
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: theme.radius.xxl,
     borderTopRightRadius: theme.radius.xxl,
-    paddingTop: 10,
+    paddingTop: 12,
   },
   handle: {
-    width: 36,
+    width: 40,
     height: 4,
-    borderRadius: 2,
-    backgroundColor: '#DDDDD8',
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.borderLight,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sheetContent: {
     paddingHorizontal: theme.spacing.xl,
     paddingBottom: 48,
-    paddingTop: 4,
+    paddingTop: 2,
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.xl,
     paddingBottom: 88,
-    paddingTop: 4,
+    paddingTop: 2,
   },
 });

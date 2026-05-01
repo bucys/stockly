@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { signUp } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
@@ -48,94 +49,101 @@ export default function RegisterScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.inner}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>IT</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.title}>Create Company</Text>
-        <Text style={styles.subtitle}>Set up your workspace — you'll be the admin</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Create company</Text>
+            <Text style={styles.subtitle}>Set up your workspace in seconds</Text>
+          </View>
 
-        <Text style={styles.label}>Company name</Text>
-        <Input
-          placeholder="e.g. Acme Warehouse"
-          value={companyName}
-          onChangeText={setCompanyName}
-          autoCapitalize="words"
-          style={styles.inputSpacing}
-        />
+          <View style={styles.form}>
+            <Text style={styles.label}>COMPANY NAME</Text>
+            <Input
+              placeholder="e.g. Acme Warehouse"
+              value={companyName}
+              onChangeText={setCompanyName}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
 
-        <Text style={styles.label}>Email</Text>
-        <Input
-          placeholder="you@company.com"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          style={styles.inputSpacing}
-        />
+            <Text style={styles.label}>YOUR EMAIL</Text>
+            <Input
+              placeholder="you@company.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              returnKeyType="next"
+            />
 
-        <Text style={styles.label}>Password</Text>
-        <Input
-          placeholder="Min 6 characters"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="new-password"
-          style={styles.inputSpacing}
-        />
+            <Text style={styles.label}>PASSWORD</Text>
+            <Input
+              placeholder="Min 6 characters"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              returnKeyType="done"
+              onSubmitEditing={handleRegister}
+            />
+          </View>
 
-        <Button
-          title="Create Account"
-          onPress={handleRegister}
-          loading={loading}
-          style={{ marginTop: 8, marginBottom: 0 }}
-        />
+          {/* Info hint */}
+          <View style={styles.hint}>
+            <Text style={styles.hintText}>
+              You'll get a <Text style={styles.hintBold}>join code</Text> to share with your team after setup.
+            </Text>
+          </View>
 
-        <TouchableOpacity style={styles.link} onPress={() => router.back()}>
-          <Text style={styles.linkText}>← Back to sign in</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.actions}>
+            <Button
+              title="Create workspace"
+              onPress={handleRegister}
+              loading={loading}
+              style={{ marginBottom: 0 }}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-  },
-  inner: {
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 80,
-    paddingBottom: 48,
+    paddingTop: 56,
+    paddingBottom: 40,
   },
-  logoMark: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    marginBottom: 20,
   },
-  logoMarkText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.5,
+  backBtnText: {
+    fontSize: 16,
+    color: theme.colors.textMuted,
+    fontWeight: '500',
   },
+  header: { marginBottom: 36 },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '800',
     color: theme.colors.text,
     letterSpacing: -0.5,
@@ -144,26 +152,27 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: theme.colors.textMuted,
-    marginBottom: 36,
   },
+  form: { gap: 2 },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textLight,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  hint: {
+    backgroundColor: theme.colors.surfaceWarm,
+    borderRadius: theme.radius.md,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 28,
+  },
+  hintText: {
+    fontSize: 14,
     color: theme.colors.textSecondary,
-    marginBottom: 8,
-    marginTop: 4,
+    lineHeight: 20,
   },
-  inputSpacing: {
-    marginBottom: 16,
-  },
-  link: {
-    marginTop: 24,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  linkText: {
-    color: theme.colors.textMuted,
-    fontSize: 15,
-    fontWeight: '500',
-  },
+  hintBold: { fontWeight: '700', color: theme.colors.text },
+  actions: { gap: 6 },
 });

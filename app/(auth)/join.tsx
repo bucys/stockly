@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { joinCompany } from '@/services/auth';
 import { Button } from '@/components/ui/Button';
@@ -44,98 +45,99 @@ export default function JoinScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.inner}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>IT</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>‹ Back</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.title}>Join Company</Text>
-        <Text style={styles.subtitle}>Enter the code from your admin</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Join a team</Text>
+            <Text style={styles.subtitle}>Enter the code from your admin</Text>
+          </View>
 
-        <Text style={styles.label}>Join code</Text>
-        <Input
-          placeholder="A3F7B21C"
-          value={joinCode}
-          onChangeText={(t) => setJoinCode(t.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          autoComplete="off"
-          maxLength={8}
-          style={styles.codeInput}
-        />
+          <View style={styles.form}>
+            <Text style={styles.label}>JOIN CODE</Text>
+            <Input
+              placeholder="e.g. A3F7B21C"
+              value={joinCode}
+              onChangeText={(t) => setJoinCode(t.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="off"
+              maxLength={8}
+              style={styles.codeInput}
+              returnKeyType="next"
+            />
 
-        <Text style={styles.label}>Email</Text>
-        <Input
-          placeholder="you@company.com"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          style={styles.inputSpacing}
-        />
+            <Text style={styles.label}>EMAIL</Text>
+            <Input
+              placeholder="you@company.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              returnKeyType="next"
+            />
 
-        <Text style={styles.label}>Password</Text>
-        <Input
-          placeholder="Min 6 characters"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoComplete="new-password"
-          style={styles.inputSpacing}
-        />
+            <Text style={styles.label}>PASSWORD</Text>
+            <Input
+              placeholder="Min 6 characters"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              returnKeyType="done"
+              onSubmitEditing={handleJoin}
+            />
+          </View>
 
-        <Button
-          title="Join Company"
-          onPress={handleJoin}
-          loading={loading}
-          disabled={!joinCode.trim() || !email.trim() || !password}
-          style={{ marginTop: 8, marginBottom: 0 }}
-        />
-
-        <TouchableOpacity style={styles.link} onPress={() => router.back()}>
-          <Text style={styles.linkText}>← Back to sign in</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={styles.actions}>
+            <Button
+              title="Join team"
+              onPress={handleJoin}
+              loading={loading}
+              disabled={!joinCode.trim() || !email.trim() || !password}
+              style={{ marginBottom: 0 }}
+            />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.surface,
-  },
-  inner: {
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  flex: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 80,
-    paddingBottom: 48,
+    paddingTop: 56,
+    paddingBottom: 40,
   },
-  logoMark: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    marginBottom: 20,
   },
-  logoMarkText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.5,
+  backBtnText: {
+    fontSize: 16,
+    color: theme.colors.textMuted,
+    fontWeight: '500',
   },
+  header: { marginBottom: 36 },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '800',
     color: theme.colors.text,
     letterSpacing: -0.5,
@@ -144,34 +146,21 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: theme.colors.textMuted,
-    marginBottom: 36,
   },
+  form: { gap: 2 },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    marginBottom: 8,
-    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textLight,
+    letterSpacing: 1,
+    marginBottom: 6,
   },
   codeInput: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     letterSpacing: 6,
     textAlign: 'center',
-    color: theme.colors.text,
     marginBottom: 20,
   },
-  inputSpacing: {
-    marginBottom: 16,
-  },
-  link: {
-    marginTop: 24,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  linkText: {
-    color: theme.colors.textMuted,
-    fontSize: 15,
-    fontWeight: '500',
-  },
+  actions: { marginTop: 28, gap: 6 },
 });
