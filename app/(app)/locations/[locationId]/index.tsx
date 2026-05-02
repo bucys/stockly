@@ -57,6 +57,7 @@ export default function LocationDetailScreen() {
   const [categories, setCategories] = useState<CategoryWithProducts[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedCatIds, setCollapsedCatIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
 
   // Category rename modal (kept for admin housekeeping via long-press)
   const [showCatModal, setShowCatModal] = useState(false);
@@ -490,7 +491,24 @@ export default function LocationDetailScreen() {
     [categories],
   );
 
+  const searchActive = search.trim() !== '';
+  const filteredCategories = useMemo(() => {
+    if (!searchActive) return visibleCategories;
+    const qProd = normalizeProductName(search);
+    const qCat = normalizeCategoryName(search);
+    return visibleCategories
+      .map((cat) => {
+        const catMatch = qCat !== '' && normalizeCategoryName(cat.name).includes(qCat);
+        const data = cat.products.filter((p) =>
+          catMatch || (qProd !== '' && normalizeProductName(p.name).includes(qProd)),
+        );
+        return { ...cat, products: data };
+      })
+      .filter((cat) => cat.products.length > 0);
+  }, [visibleCategories, search, searchActive]);
+
   const isEmpty = !loading && visibleCategories.length === 0;
+  const noSearchResults = !loading && !isEmpty && searchActive && filteredCategories.length === 0;
 
   return (
     <View style={styles.container}>
@@ -541,14 +559,35 @@ export default function LocationDetailScreen() {
         </View>
       ) : (
         <>
+          <View style={styles.toolbar}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              placeholderTextColor={theme.colors.textPlaceholder}
+              value={search}
+              onChangeText={setSearch}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
           <ScrollView
             contentContainerStyle={[
               styles.scroll,
               role === 'admin' && { paddingBottom: 160 + insets.bottom },
             ]}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           >
-            {visibleCategories.map((cat) => {
-              const collapsed = collapsedCatIds.has(cat.id);
+            {noSearchResults && (
+              <View style={styles.noResults}>
+                <Text style={styles.noResultsTitle}>No products found</Text>
+                <Text style={styles.noResultsSub}>Try a different search term.</Text>
+              </View>
+            )}
+            {filteredCategories.map((cat) => {
+              const collapsed = !searchActive && collapsedCatIds.has(cat.id);
               return (
               <View key={cat.id} style={styles.section}>
                 <TouchableOpacity
@@ -954,6 +993,35 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   scroll: { padding: theme.spacing.lg, gap: 14, paddingBottom: 88 },
+  toolbar: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  searchInput: {
+    height: 42,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: theme.colors.text,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  noResults: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noResultsTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+    marginBottom: 4,
+  },
+  noResultsSub: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+  },
 
   // Category section card
   section: {
