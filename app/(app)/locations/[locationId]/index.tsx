@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   TextInput,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompanyId } from '@/lib/useCompanyId';
 import {
   getCategoriesWithProducts,
@@ -32,6 +34,12 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { theme, shadows } from '@/constants/theme';
+import { normalizeCategoryName } from '@/lib/normalizeCategoryName';
+import { normalizeProductName } from '@/lib/normalizeProductName';
+import { parseImportText, type ParsedImportRow } from '@/lib/parseImportText';
+import { ImportReviewSheet } from '@/components/inventory/ImportReviewSheet';
+import { commitImportPlan } from '@/services/importProducts';
+import type { ImportPlan } from '@/lib/importMatchers';
 
 const UNITS = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'bottle', 'pack', 'bag', 'roll', 'm'];
 
@@ -41,16 +49,14 @@ interface EditingProduct extends ProductRow {
 
 type ImportStep = 'select-location' | 'select-categories' | null;
 
-function normalize(s: string): string {
-  return s.trim().toLowerCase();
-}
-
 export default function LocationDetailScreen() {
   const { locationId, name } = useLocalSearchParams<{ locationId: string; name: string }>();
   const { companyId, role } = useCompanyId();
+  const insets = useSafeAreaInsets();
 
   const [categories, setCategories] = useState<CategoryWithProducts[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsedCatIds, setCollapsedCatIds] = useState<Set<string>>(new Set());
 
   // Category rename modal (kept for admin housekeeping via long-press)
   const [showCatModal, setShowCatModal] = useState(false);
@@ -78,6 +84,16 @@ export default function LocationDetailScreen() {
   const [importMode, setImportMode] = useState<ImportMode>('add');
   const [importing, setImporting] = useState(false);
 
+  // Import entry menu
+  const [showImportMenu, setShowImportMenu] = useState(false);
+
+  // Paste-text import flow
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([]);
+  const [showReview, setShowReview] = useState(false);
+  const [committing, setCommitting] = useState(false);
+
   const load = useCallback(async () => {
     if (!locationId) return;
     setLoading(true);
@@ -91,6 +107,23 @@ export default function LocationDetailScreen() {
   }, [locationId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Default: collapse all categories. Preserve user expansions across reloads.
+  useEffect(() => {
+    setCollapsedCatIds((prev) => {
+      if (prev.size > 0) return prev;
+      return new Set(categories.map((c) => c.id));
+    });
+  }, [categories]);
+
+  function toggleCategory(id: string) {
+    setCollapsedCatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // ── Category rename/delete (long-press only) ─────────────────────────────────
 
@@ -170,8 +203,8 @@ export default function LocationDetailScreen() {
     if (!locationId) return null;
     const trimmed = rawText.trim();
     if (!trimmed) return null;
-    const norm = normalize(trimmed);
-    const existing = categories.find((c) => normalize(c.name) === norm);
+    const norm = normalizeCategoryName(trimmed);
+    const existing = categories.find((c) => normalizeCategoryName(c.name) === norm);
     if (existing) return existing.id;
     try {
       const created = await createCategory(locationId, trimmed);
@@ -192,6 +225,40 @@ export default function LocationDetailScreen() {
         Alert.alert('Error', 'Could not resolve category.');
         return;
       }
+
+      const newNorm = normalizeProductName(productName);
+      const matches: { name: string; categoryId: string; unit: string }[] = [];
+      for (const cat of categories) {
+        for (const p of cat.products) {
+          if (editingProduct && p.id === editingProduct.id) continue;
+          if (normalizeProductName(p.name) === newNorm) {
+            matches.push({ name: p.name, categoryId: cat.id, unit: p.unit });
+          }
+        }
+      }
+      const exact = matches.find((m) => m.categoryId === categoryId && m.unit === productUnit);
+      if (exact) {
+        Alert.alert(
+          'Duplicate product',
+          `"${exact.name}" already exists in this category with unit "${exact.unit}".`,
+        );
+        return;
+      }
+      if (matches.length > 0) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Possible duplicate',
+            `A product named "${matches[0].name}" already exists elsewhere. Save anyway?`,
+            [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Save anyway', onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        });
+        if (!proceed) return;
+      }
+
       if (editingProduct) {
         await updateProduct(editingProduct.id, productName.trim(), productUnit, lastQty, categoryId);
       } else {
@@ -239,14 +306,14 @@ export default function LocationDetailScreen() {
   // ── Category suggestions for product modal ──────────────────────────────────
 
   const categorySuggestions = useMemo(() => {
-    const q = normalize(productCategoryText);
+    const q = normalizeCategoryName(productCategoryText);
     if (!q) {
       return categories.slice(0, 6).map((c) => c.name);
     }
-    const exact = categories.some((c) => normalize(c.name) === q);
+    const exact = categories.some((c) => normalizeCategoryName(c.name) === q);
     if (exact) return [];
     return categories
-      .filter((c) => normalize(c.name).includes(q))
+      .filter((c) => normalizeCategoryName(c.name).includes(q))
       .map((c) => c.name)
       .slice(0, 6);
   }, [productCategoryText, categories]);
@@ -355,6 +422,55 @@ export default function LocationDetailScreen() {
     }
   }
 
+  // ── Paste-text import ────────────────────────────────────────────────────────
+
+  function openPasteImport() {
+    setPasteText('');
+    setParsedRows([]);
+    setShowPasteModal(true);
+  }
+
+  function closePasteImport() {
+    setShowPasteModal(false);
+    setPasteText('');
+  }
+
+  function handleParse() {
+    const result = parseImportText(pasteText);
+    if (result.rows.length === 0) {
+      Alert.alert('Nothing to import', 'No rows found. Use one product per line:\nname, category, unit, qty?');
+      return;
+    }
+    setParsedRows(result.rows);
+    setShowPasteModal(false);
+    setShowReview(true);
+  }
+
+  async function handleConfirmImport(plan: ImportPlan) {
+    if (!locationId) return;
+    setCommitting(true);
+    try {
+      const result = await commitImportPlan(plan, locationId);
+      setShowReview(false);
+      setParsedRows([]);
+      setPasteText('');
+      const failedCount = result.failed.length;
+      const message =
+        `Imported ${result.productsCreated} product${result.productsCreated === 1 ? '' : 's'}` +
+        (result.categoriesCreated > 0
+          ? ` in ${result.categoriesCreated} new categor${result.categoriesCreated === 1 ? 'y' : 'ies'}`
+          : '') +
+        `. ${result.skipped} skipped` +
+        (failedCount > 0 ? `, ${failedCount} failed.` : '.');
+      Alert.alert('Import complete', message);
+      load();
+    } catch (err) {
+      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setCommitting(false);
+    }
+  }
+
   function closeImport() {
     setImportStep(null);
     setSourceLocations([]);
@@ -382,13 +498,6 @@ export default function LocationDetailScreen() {
         options={{
           title: name ?? 'Location',
           headerBackTitle: 'Back',
-          headerRight: role === 'admin'
-            ? () => (
-                <TouchableOpacity onPress={() => openCreateProduct()} style={styles.headerBtn}>
-                  <Text style={styles.headerBtnText}>+ Product</Text>
-                </TouchableOpacity>
-              )
-            : undefined,
         }}
       />
 
@@ -418,29 +527,50 @@ export default function LocationDetailScreen() {
                 onPress={openImport}
                 activeOpacity={0.7}
               >
-                <Text style={styles.importEmptyBtnText}>Import from another location</Text>
+                <Text style={styles.importEmptyBtnText}>Copy from another location</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.importEmptyBtn}
+                onPress={openPasteImport}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.importEmptyBtnText}>Import from text</Text>
               </TouchableOpacity>
             </>
           )}
         </View>
       ) : (
         <>
-          <ScrollView contentContainerStyle={styles.scroll}>
-            {visibleCategories.map((cat) => (
+          <ScrollView
+            contentContainerStyle={[
+              styles.scroll,
+              role === 'admin' && { paddingBottom: 160 + insets.bottom },
+            ]}
+          >
+            {visibleCategories.map((cat) => {
+              const collapsed = collapsedCatIds.has(cat.id);
+              return (
               <View key={cat.id} style={styles.section}>
                 <TouchableOpacity
                   style={styles.categoryRow}
+                  onPress={() => toggleCategory(cat.id)}
                   onLongPress={role === 'admin' ? () => handleCategoryActions(cat) : undefined}
                   delayLongPress={400}
-                  activeOpacity={role === 'admin' ? 0.7 : 1}
+                  activeOpacity={0.6}
                 >
                   <Text style={styles.categoryName}>{cat.name.toUpperCase()}</Text>
                   <Text style={styles.categoryCount}>
-                    {cat.products.length}
+                    {cat.products.length} {cat.products.length === 1 ? 'product' : 'products'}
                   </Text>
+                  <Ionicons
+                    name={collapsed ? 'chevron-forward' : 'chevron-down'}
+                    size={14}
+                    color={theme.colors.textLight}
+                    style={styles.categoryChevron}
+                  />
                 </TouchableOpacity>
 
-                {cat.products.map((product) => (
+                {!collapsed && cat.products.map((product) => (
                   <TouchableOpacity
                     key={product.id}
                     style={styles.productRow}
@@ -464,13 +594,33 @@ export default function LocationDetailScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            ))}
+              );
+            })}
+
           </ScrollView>
 
           {role === 'admin' && (
-            <TouchableOpacity style={styles.importFooterBtn} onPress={openImport} activeOpacity={0.8}>
-              <Text style={styles.importFooterBtnText}>Import / Copy setup</Text>
+            <TouchableOpacity
+              style={[styles.fab, { bottom: 80 + insets.bottom }]}
+              onPress={() => openCreateProduct()}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+              <Text style={styles.fabText}>Add product</Text>
             </TouchableOpacity>
+          )}
+
+          {role === 'admin' && (
+            <View style={[styles.importBar, { paddingBottom: 12 + insets.bottom }]}>
+              <TouchableOpacity
+                style={styles.importBtn}
+                onPress={() => setShowImportMenu(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cloud-download-outline" size={18} color={theme.colors.textSecondary} />
+                <Text style={styles.importBtnText}>Import</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </>
       )}
@@ -479,6 +629,8 @@ export default function LocationDetailScreen() {
       <ModalSheet
         visible={showCatModal}
         onClose={() => setShowCatModal(false)}
+        scrollable
+        maxHeight="90%"
       >
         <Text style={styles.sheetTitle}>Rename category</Text>
         <Input
@@ -543,7 +695,7 @@ export default function LocationDetailScreen() {
           </View>
         )}
         {productCategoryText.trim() !== '' &&
-          !categories.some((c) => normalize(c.name) === normalize(productCategoryText)) && (
+          !categories.some((c) => normalizeCategoryName(c.name) === normalizeCategoryName(productCategoryText)) && (
             <Text style={styles.suggestionHint}>
               Will create new category "{productCategoryText.trim()}"
             </Text>
@@ -694,6 +846,106 @@ export default function LocationDetailScreen() {
           </>
         )}
       </ModalSheet>
+
+      {/* ── Import options menu ───────────────────────────────────────────── */}
+      <ModalSheet
+        visible={showImportMenu}
+        onClose={() => setShowImportMenu(false)}
+        scrollable
+        maxHeight="70%"
+      >
+        <Text style={styles.sheetTitle}>Import products</Text>
+
+        <TouchableOpacity
+          style={styles.importMenuRow}
+          onPress={() => {
+            setShowImportMenu(false);
+            openImport();
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="copy-outline" size={20} color={theme.colors.text} />
+          <View style={styles.importMenuTextWrap}>
+            <Text style={styles.importMenuTitle}>Copy from another location</Text>
+            <Text style={styles.importMenuSub}>Reuse categories and products from a sibling location.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.importMenuRow}
+          onPress={() => {
+            setShowImportMenu(false);
+            openPasteImport();
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
+          <View style={styles.importMenuTextWrap}>
+            <Text style={styles.importMenuTitle}>Import from text</Text>
+            <Text style={styles.importMenuSub}>Paste comma, semicolon, or tab-separated rows.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
+        </TouchableOpacity>
+
+        <View style={[styles.importMenuRow, styles.importMenuRowDisabled]}>
+          <Ionicons name="grid-outline" size={20} color={theme.colors.textLight} />
+          <View style={styles.importMenuTextWrap}>
+            <Text style={[styles.importMenuTitle, styles.importMenuTitleDisabled]}>Import from CSV</Text>
+            <Text style={styles.importMenuSub}>Coming soon</Text>
+          </View>
+        </View>
+
+        <View style={[styles.importMenuRow, styles.importMenuRowDisabled]}>
+          <Ionicons name="document-attach-outline" size={20} color={theme.colors.textLight} />
+          <View style={styles.importMenuTextWrap}>
+            <Text style={[styles.importMenuTitle, styles.importMenuTitleDisabled]}>Import from PDF</Text>
+            <Text style={styles.importMenuSub}>Coming soon</Text>
+          </View>
+        </View>
+
+        <Button title="Cancel" onPress={() => setShowImportMenu(false)} variant="ghost" />
+      </ModalSheet>
+
+      {/* ── Paste-text import modal ───────────────────────────────────────── */}
+      <ModalSheet
+        visible={showPasteModal}
+        onClose={closePasteImport}
+        scrollable
+        maxHeight="90%"
+      >
+        <Text style={styles.sheetTitle}>Import from text</Text>
+        <Text style={styles.pasteHint}>
+          One product per line: name, category, unit, qty (optional).{'\n'}
+          Delimiters: comma, semicolon, or tab.{'\n'}
+          Use semicolon or tab if your quantities use decimal commas, e.g. 1,5
+        </Text>
+        <TextInput
+          style={styles.pasteArea}
+          value={pasteText}
+          onChangeText={setPasteText}
+          placeholder={'Coca-Cola, Drinks, bottle, 12\nMilk; Dairy; l; 20'}
+          placeholderTextColor={theme.colors.textPlaceholder}
+          multiline
+          autoCorrect={false}
+          autoCapitalize="none"
+          textAlignVertical="top"
+        />
+        <Button title="Parse" onPress={handleParse} disabled={pasteText.trim() === ''} />
+        <Button title="Cancel" onPress={closePasteImport} variant="ghost" />
+      </ModalSheet>
+
+      {/* ── Review parsed rows ────────────────────────────────────────────── */}
+      <ImportReviewSheet
+        visible={showReview}
+        onClose={() => {
+          if (committing) return;
+          setShowReview(false);
+        }}
+        parsedRows={parsedRows}
+        categories={categories}
+        onConfirm={handleConfirmImport}
+      />
     </View>
   );
 }
@@ -728,6 +980,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.textMuted,
+  },
+  categoryChevron: {
+    marginLeft: 8,
   },
   productRow: {
     flexDirection: 'row',
@@ -780,8 +1035,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   primaryEmptyBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
-  headerBtn: { paddingHorizontal: 4 },
-  headerBtnText: { fontSize: 14, fontWeight: '500', color: theme.colors.primary },
   importEmptyBtn: {
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -791,27 +1044,91 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
   },
   importEmptyBtnText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
-  importFooterBtn: {
+  importBar: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    paddingVertical: 18,
-    alignItems: 'center',
+    bottom: 0,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 12,
+    backgroundColor: theme.colors.background,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surface,
   },
-  importFooterBtnText: { fontSize: 15, color: theme.colors.textMuted, fontWeight: '600' },
+  importBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  importBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  importMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  importMenuRowDisabled: { opacity: 0.5 },
+  importMenuTextWrap: { flex: 1 },
+  importMenuTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  importMenuTitleDisabled: { color: theme.colors.textMuted },
+  importMenuSub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: theme.radius.pill,
+    ...shadows.md,
+  },
+  fabText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
 
   // Modal shared
   sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 18 },
+  pasteHint: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  pasteArea: {
+    minHeight: 180,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.inputBg,
+    marginBottom: theme.spacing.md,
+  },
   fieldLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.textLight,
     marginBottom: 8,
-    marginTop: 4,
+    marginTop: 14,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },

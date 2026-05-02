@@ -20,6 +20,7 @@ interface ModalSheetProps {
   maxHeight?: number | `${number}%`;
   avoidKeyboard?: boolean;
   sheetStyle?: ViewStyle;
+  keyboardVerticalOffset?: number;
 }
 
 export function ModalSheet({
@@ -30,6 +31,7 @@ export function ModalSheet({
   maxHeight,
   avoidKeyboard = true,
   sheetStyle,
+  keyboardVerticalOffset = 0,
 }: ModalSheetProps) {
   function handleClose() {
     Keyboard.dismiss();
@@ -39,8 +41,11 @@ export function ModalSheet({
   const sheetContent = scrollable ? (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
+      keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      bounces={false}
     >
       {children}
     </ScrollView>
@@ -69,6 +74,7 @@ export function ModalSheet({
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={keyboardVerticalOffset}
         >
           <Pressable style={styles.overlay} onPress={handleClose}>
             {sheet}
@@ -105,12 +111,12 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     paddingHorizontal: theme.spacing.xl,
-    paddingBottom: 48,
+    paddingBottom: 120,
     paddingTop: 2,
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.xl,
-    paddingBottom: 88,
+    paddingBottom: 120,
     paddingTop: 2,
   },
 });

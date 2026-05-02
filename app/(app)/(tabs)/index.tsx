@@ -234,7 +234,12 @@ export default function LocationsTab() {
         </TouchableOpacity>
       )}
 
-      <ModalSheet visible={showModal} onClose={() => setShowModal(false)}>
+      <ModalSheet
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        scrollable
+        maxHeight="90%"
+      >
         <Text style={styles.sheetTitle}>
           {editingLocation ? 'Edit location' : 'New location'}
         </Text>
@@ -371,5 +376,5 @@ const styles = StyleSheet.create({
 
   errorTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.danger, marginBottom: 8, textAlign: 'center' },
   errorSub: { fontSize: 13, color: theme.colors.textLight, textAlign: 'center', marginBottom: 4, paddingHorizontal: 32 },
-  sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 16 },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 18 },
 });

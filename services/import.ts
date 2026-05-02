@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { normalizeCategoryName } from '@/lib/normalizeCategoryName';
 import { getCategoriesWithProducts, CategoryWithProducts } from './categories';
 
 export type ImportMode = 'add' | 'replace';
@@ -124,34 +125,25 @@ export async function importSetup({
   }
 
   // ── Load existing target categories once (used for duplicate check in add mode) ──
-  const existingCatNames = new Set<string>();
+  const existingCatByNorm = new Map<string, string>();
   if (mode === 'add') {
     const { data: existing } = await supabase
       .from('categories')
-      .select('name')
+      .select('id, name')
       .eq('location_id', targetLocationId);
-    (existing ?? []).forEach((c) => existingCatNames.add(c.name.toLowerCase()));
-    console.log('[importSetup] existing category names in target:', existingCatNames.size);
+    (existing ?? []).forEach((c) => existingCatByNorm.set(normalizeCategoryName(c.name), c.id));
+    console.log('[importSetup] existing category names in target:', existingCatByNorm.size);
   }
 
   // ── Process each selected category ──────────────────────────────────────────
   for (const sourceCat of selectedCategories) {
     let targetCatId: string;
+    const sourceNorm = normalizeCategoryName(sourceCat.name);
+    const existingId = mode === 'add' ? existingCatByNorm.get(sourceNorm) : undefined;
 
-    if (mode === 'add' && existingCatNames.has(sourceCat.name.toLowerCase())) {
-      // Reuse existing category — fetch its id
-      const { data: existing } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('location_id', targetLocationId)
-        .ilike('name', sourceCat.name)
-        .single();
-      if (!existing) {
-        console.warn('[importSetup] could not resolve existing category:', sourceCat.name);
-        continue;
-      }
+    if (existingId) {
       console.log('[importSetup] category already exists, merging into:', sourceCat.name);
-      targetCatId = existing.id;
+      targetCatId = existingId;
     } else {
       const { data: newCat, error: catErr } = await supabase
         .from('categories')
@@ -176,11 +168,11 @@ export async function importSetup({
         .from('products')
         .select('name')
         .eq('category_id', targetCatId);
-      (ep ?? []).forEach((p) => existingProductNames.add(p.name.toLowerCase()));
+      (ep ?? []).forEach((p) => existingProductNames.add(normalizeCategoryName(p.name)));
     }
 
     const newProducts = sourceCat.products
-      .filter((p) => !existingProductNames.has(p.name.toLowerCase()))
+      .filter((p) => !existingProductNames.has(normalizeCategoryName(p.name)))
       .map((p) => ({
         category_id: targetCatId,
         name: p.name,
