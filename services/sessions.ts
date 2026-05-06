@@ -7,6 +7,7 @@ export interface Session {
   location_id: string;
   created_at: string;
   status: SessionStatus;
+  created_by: string | null;
 }
 
 export interface CountRow {
@@ -33,7 +34,7 @@ export async function getSessions(locationId: string): Promise<Session[]> {
   console.log('[getSessions] location_id:', locationId);
   const { data, error } = await supabase
     .from('inventory_sessions')
-    .select('id, location_id, created_at, status')
+    .select('id, location_id, created_at, status, created_by')
     .eq('location_id', locationId)
     .order('created_at', { ascending: false });
   if (error) {
@@ -46,9 +47,12 @@ export async function getSessions(locationId: string): Promise<Session[]> {
 
 export async function createSession(locationId: string): Promise<Session> {
   console.log('[createSession] location_id:', locationId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('inventory_sessions')
-    .insert({ location_id: locationId, status: 'active' })
+    .insert({ location_id: locationId, status: 'active', created_by: user?.id ?? null })
     .select()
     .single();
   if (error) {
