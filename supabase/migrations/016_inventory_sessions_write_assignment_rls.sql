@@ -48,9 +48,11 @@ create policy "sessions insert by role and assignment"
   );
 
 -- ── UPDATE ────────────────────────────────────────────────────────────────
+-- ── UPDATE ────────────────────────────────────────────────────────────────
 drop policy if exists "members can update sessions" on inventory_sessions;
+drop policy if exists "sessions update by role and assignment" on inventory_sessions;
 
-create policy "sessions update by role and assignment"
+create policy "sessions update by assigned location"
   on inventory_sessions for update
   using (
     (
@@ -61,11 +63,7 @@ create policy "sessions update by role and assignment"
           and l.company_id = user_company_id()
       )
     )
-    or (
-      can_access_location(location_id)
-      and created_by is not null
-      and created_by = auth.uid()
-    )
+    or can_access_location(location_id)
   )
   with check (
     (
@@ -76,11 +74,7 @@ create policy "sessions update by role and assignment"
           and l.company_id = user_company_id()
       )
     )
-    or (
-      can_access_location(location_id)
-      and created_by is not null
-      and created_by = auth.uid()
-    )
+    or can_access_location(location_id)
   );
 
 -- ── Rollback (paste into a new migration if needed) ───────────────────────
