@@ -134,6 +134,17 @@ export async function getSessionCounts(sessionId: string): Promise<CountRow[]> {
   return data as CountRow[];
 }
 
+export async function cancelSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('inventory_sessions')
+    .delete()
+    .eq('id', sessionId);
+  if (error) {
+    console.error('[cancelSession] error:', error.message, 'code:', error.code);
+    throw new Error(`Cancel failed: ${error.message}`);
+  }
+}
+
 export async function getLatestSessionCount(
   sessionId: string,
 ): Promise<CountRow | null> {

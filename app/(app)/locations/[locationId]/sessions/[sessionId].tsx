@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Stack, useLocalSearchParams, useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompanyId } from '@/lib/useCompanyId';
@@ -21,6 +21,7 @@ import {
   getSessionCounts,
   upsertCount,
   completeSession,
+  cancelSession,
   CountRow,
   Session,
 } from '@/services/sessions';
@@ -401,6 +402,39 @@ export default function CountingScreen() {
     }
   }
 
+  async function handleCancel() {
+    if (!sessionId) return;
+    const hasCounts = counted > 0;
+    const message = hasCounts
+      ? `${counted} count${counted === 1 ? '' : 's'} have already been entered. Only an admin can delete a session with counts.`
+      : 'This will delete the session. Continue?';
+    Alert.alert(
+      hasCounts && role !== 'admin' ? 'Cannot cancel' : 'Cancel session?',
+      message,
+      hasCounts && role !== 'admin'
+        ? [{ text: 'OK', style: 'cancel' }]
+        : [
+            { text: 'Keep session', style: 'cancel' },
+            {
+              text: 'Cancel session',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await cancelSession(sessionId);
+                  if (router.canGoBack()) router.back();
+                  else router.replace('/(app)/(tabs)');
+                } catch (err) {
+                  Alert.alert(
+                    'Error',
+                    err instanceof Error ? err.message : 'Failed to cancel session',
+                  );
+                }
+              },
+            },
+          ],
+    );
+  }
+
   async function handleComplete() {
     if (!sessionId) return;
     Alert.alert(
@@ -590,6 +624,13 @@ export default function CountingScreen() {
             <Text style={styles.finishBtnText}>
               Finish session ({counted}/{total})
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={handleCancel}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cancelBtnText}>Cancel session</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -900,6 +941,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  cancelBtnText: {
+    color: theme.colors.danger,
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // Export footer
