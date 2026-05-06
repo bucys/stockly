@@ -134,6 +134,20 @@ export async function getSessionCounts(sessionId: string): Promise<CountRow[]> {
   return data as CountRow[];
 }
 
+export async function getLatestSessionCount(
+  sessionId: string,
+): Promise<CountRow | null> {
+  const { data, error } = await supabase
+    .from('inventory_counts')
+    .select('id, session_id, product_id, quantity, updated_by, updated_at')
+    .eq('session_id', sessionId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as CountRow | null;
+}
+
 export async function upsertCount(
   sessionId: string,
   productId: string,

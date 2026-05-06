@@ -28,6 +28,7 @@ import { buildCSV, ExportRow } from '@/services/export';
 import { Button } from '@/components/ui/Button';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { theme, shadows } from '@/constants/theme';
+import { useLocationAccessGuard } from '@/lib/useLocationAccess';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,7 @@ export default function CountingScreen() {
     sessionId: string;
     locationName: string;
   }>();
+  useLocationAccessGuard(locationId);
 
   const { role } = useCompanyId();
   const insets = useSafeAreaInsets();
@@ -492,13 +494,6 @@ export default function CountingScreen() {
         options={{
           title: locationName ?? 'Inventory',
           headerBackTitle: 'Back',
-          headerRight: isCompleted
-            ? () => (
-                <View style={styles.completedBadge}>
-                  <Text style={styles.completedBadgeText}>Completed ✓</Text>
-                </View>
-              )
-            : undefined,
         }}
       />
 

@@ -121,12 +121,15 @@ export default function ProfileTab() {
     return `Employee · ${userId.slice(0, 8)}`;
   }
 
-  async function toggleAssignment(employee: EmployeeWithAssignments, locationId: string) {
+  async function applyAssignmentChange(
+    employee: EmployeeWithAssignments,
+    locationId: string,
+    action: 'assign' | 'unassign',
+  ) {
     if (!companyId) return;
-    const isAssigned = employee.assignments.some((a) => a.location_id === locationId);
     setAssignmentSaving(locationId);
     try {
-      if (isAssigned) {
+      if (action === 'unassign') {
         await unassignEmployeeFromLocation({ userId: employee.user_id, locationId });
       } else {
         await assignEmployeeToLocation({
@@ -144,6 +147,27 @@ export default function ProfileTab() {
     } finally {
       setAssignmentSaving(null);
     }
+  }
+
+  function toggleAssignment(employee: EmployeeWithAssignments, locationId: string) {
+    if (!companyId) return;
+    const isAssigned = employee.assignments.some((a) => a.location_id === locationId);
+    if (!isAssigned) {
+      applyAssignmentChange(employee, locationId, 'assign');
+      return;
+    }
+    Alert.alert(
+      'Remove access?',
+      'This employee will lose access to this location and its sessions.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => applyAssignmentChange(employee, locationId, 'unassign'),
+        },
+      ],
+    );
   }
 
   async function handleSignOut() {

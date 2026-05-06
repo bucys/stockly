@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,22 +15,29 @@ import { getLocations, Location } from '@/services/locations';
 import {
   getSessions,
   getSessionCounts,
+  getLatestSessionCount,
   createSession,
   Session,
 } from '@/services/sessions';
+import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles';
+import { supabase } from '@/lib/supabase';
 import { theme, shadows } from '@/constants/theme';
 import { relativeTime } from '@/lib/relativeTime';
+import { useAssignedLocationIds } from '@/lib/useLocationAccess';
+import { displayUser } from '@/lib/userDisplay';
 
 interface ActiveSessionInfo {
   session: Session;
   location: Location;
   counted: number;
   total: number;
+  lastBy: string | null;
 }
 
 interface HistoryItem {
   session: Session;
   location: Location;
+  lastBy: string | null;
 }
 
 function formatDateTime(iso: string) {
@@ -55,72 +62,110 @@ function formatHistoryDate(iso: string) {
 }
 
 export default function SessionsTab() {
-  const { companyId, loading: companyLoading } = useCompanyId();
+  const { companyId, role, loading: companyLoading } = useCompanyId();
+  const { ids: assignedIds, loading: assignedLoading } = useAssignedLocationIds();
   const [locations, setLocations] = useState<Location[]>([]);
   const [activeInfos, setActiveInfos] = useState<ActiveSessionInfo[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
+  const [profilesByUserId, setProfilesByUserId] = useState<Map<string, UserProfile>>(
+    new Map(),
+  );
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
 
   const load = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
     try {
-      const locs = await getLocations(companyId);
+      const allLocs = await getLocations(companyId);
+      const locs =
+        assignedIds == null
+          ? allLocs
+          : allLocs.filter((l) => assignedIds.has(l.id));
       setLocations(locs);
+
+      const profiles = await listCompanyMemberProfiles(companyId).catch(() => []);
+      const profMap = new Map<string, UserProfile>();
+      for (const p of profiles) profMap.set(p.user_id, p);
+      setProfilesByUserId(profMap);
 
       const allSessions = await Promise.all(
         locs.map((l) => getSessions(l.id).catch(() => [] as Session[])),
       );
 
-      const locById = new Map(locs.map((l) => [l.id, l]));
       const actives: Array<{ session: Session; location: Location }> = [];
-      const completed: HistoryItem[] = [];
+      // Latest completed session per location only (history clutter reduction).
+      const completedByLoc = new Map<string, { session: Session; location: Location }>();
       for (let i = 0; i < locs.length; i++) {
         const loc = locs[i];
         for (const s of allSessions[i]) {
-          if (s.status === 'active') actives.push({ session: s, location: loc });
-          else if (s.status === 'completed') completed.push({ session: s, location: loc });
+          if (s.status === 'active') {
+            actives.push({ session: s, location: loc });
+          } else if (s.status === 'completed') {
+            const existing = completedByLoc.get(loc.id);
+            if (
+              !existing ||
+              new Date(s.created_at).getTime() >
+                new Date(existing.session.created_at).getTime()
+            ) {
+              completedByLoc.set(loc.id, { session: s, location: loc });
+            }
+          }
         }
       }
 
       const activeWithCounts: ActiveSessionInfo[] = await Promise.all(
         actives.map(async ({ session, location }) => {
           const counts = await getSessionCounts(session.id).catch(() => []);
+          const latest = counts.reduce<typeof counts[number] | null>((acc, c) => {
+            if (!c.updated_at) return acc;
+            if (!acc || new Date(c.updated_at) > new Date(acc.updated_at)) return c;
+            return acc;
+          }, null);
           return {
             session,
             location,
             counted: counts.length,
             total: location.productCount,
+            lastBy: latest?.updated_by ?? null,
           };
         }),
       );
 
-      completed.sort(
+      const completedList = Array.from(completedByLoc.values()).sort(
         (a, b) =>
           new Date(b.session.created_at).getTime() - new Date(a.session.created_at).getTime(),
       );
+      const completedWithBy: HistoryItem[] = await Promise.all(
+        completedList.map(async ({ session, location }) => {
+          const latest = await getLatestSessionCount(session.id).catch(() => null);
+          return { session, location, lastBy: latest?.updated_by ?? null };
+        }),
+      );
 
       setActiveInfos(activeWithCounts);
-      setHistory(completed);
+      setHistory(completedWithBy);
       setLastUpdatedAt(
-        completed[0] ? new Date(completed[0].session.created_at) : null,
+        completedWithBy[0] ? new Date(completedWithBy[0].session.created_at) : null,
       );
-      // suppress unused-var lint by referencing locById
-      void locById;
     } catch (err) {
       console.error('[SessionsTab] load error:', err);
       Alert.alert('Error', 'Failed to load sessions');
     } finally {
       setLoading(false);
     }
-  }, [companyId]);
+  }, [companyId, assignedIds]);
 
   useFocusEffect(
     useCallback(() => {
-      if (companyId) load();
-    }, [companyId, load]),
+      if (companyId && !assignedLoading) load();
+    }, [companyId, assignedLoading, load]),
   );
 
   function openSession(locationId: string, locationName: string, sessionId: string) {
@@ -152,10 +197,35 @@ export default function SessionsTab() {
     }
   }
 
-  if (companyLoading || loading) {
+  if (companyLoading || assignedLoading || loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  const employeeUnassigned =
+    role === 'employee' && assignedIds != null && assignedIds.size === 0;
+  if (employeeUnassigned) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyWrap}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="lock-closed-outline" size={32} color={theme.colors.textMuted} />
+          </View>
+          <Text style={styles.emptyTitle}>No locations assigned</Text>
+          <Text style={styles.emptySub}>
+            Your account has not been added to any locations. Ask an admin for permission.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => Alert.alert('Access requests', 'Access requests coming soon.')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyBtnText}>Request access</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -205,6 +275,7 @@ export default function SessionsTab() {
               <ActiveSessionCard
                 key={info.session.id}
                 info={info}
+                lastByLabel={displayUser(info.lastBy, profilesByUserId, currentUserId)}
                 onContinue={() =>
                   openSession(info.location.id, info.location.name, info.session.id)
                 }
@@ -254,8 +325,8 @@ export default function SessionsTab() {
 
             {history.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>HISTORY</Text>
-                <View style={styles.groupCard}>
+                <Text style={styles.sectionLabel}>LATEST COMPLETED</Text>
+                <View style={styles.groupCardSecondary}>
                   {history.map((h, idx) => (
                     <TouchableOpacity
                       key={h.session.id}
@@ -269,12 +340,12 @@ export default function SessionsTab() {
                       activeOpacity={0.7}
                     >
                       <View style={styles.groupRowLeft}>
-                        <Text style={styles.groupRowName} numberOfLines={1}>
+                        <Text style={styles.historyRowName} numberOfLines={1}>
                           {h.location.name}
                         </Text>
-                        <Text style={styles.groupRowMeta} numberOfLines={1}>
-                          {formatHistoryDate(h.session.created_at)} ·{' '}
-                          {h.location.productCount} products
+                        <Text style={styles.historyRowMeta} numberOfLines={1}>
+                          {formatHistoryDate(h.session.created_at)} · Last counted by:{' '}
+                          {displayUser(h.lastBy, profilesByUserId, currentUserId)}
                         </Text>
                       </View>
                       <View style={styles.completeBadge}>
@@ -282,13 +353,22 @@ export default function SessionsTab() {
                       </View>
                       <Ionicons
                         name="chevron-forward"
-                        size={18}
+                        size={16}
                         color={theme.colors.textLight}
                         style={styles.historyChevron}
                       />
                     </TouchableOpacity>
                   ))}
                 </View>
+                <TouchableOpacity
+                  onPress={() =>
+                    Alert.alert('All history', 'All history coming soon.')
+                  }
+                  style={styles.viewAllBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.viewAllText}>View all history</Text>
+                </TouchableOpacity>
               </View>
             )}
           </>
@@ -300,9 +380,11 @@ export default function SessionsTab() {
 
 function ActiveSessionCard({
   info,
+  lastByLabel,
   onContinue,
 }: {
   info: ActiveSessionInfo;
+  lastByLabel: string;
   onContinue: () => void;
 }) {
   const total = info.total > 0 ? info.total : 0;
@@ -327,6 +409,7 @@ function ActiveSessionCard({
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${pct}%` }]} />
       </View>
+      <Text style={styles.activeByText}>Last edited by: {lastByLabel}</Text>
       <TouchableOpacity style={styles.continueBtn} onPress={onContinue} activeOpacity={0.85}>
         <Text style={styles.continueBtnText}>Continue counting  →</Text>
       </TouchableOpacity>
@@ -444,6 +527,32 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     ...shadows.sm,
     overflow: 'hidden',
+  },
+  groupCardSecondary: {
+    backgroundColor: theme.colors.surfaceWarm,
+    borderRadius: theme.radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  historyRowName: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
+  historyRowMeta: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2 },
+  viewAllBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
+  activeByText: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+    marginBottom: 8,
   },
   groupRow: {
     flexDirection: 'row',

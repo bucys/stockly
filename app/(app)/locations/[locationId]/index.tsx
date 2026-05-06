@@ -14,6 +14,7 @@ import { Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompanyId } from '@/lib/useCompanyId';
+import { useLocationAccessGuard } from '@/lib/useLocationAccess';
 import {
   getCategoriesWithProducts,
   createCategory,
@@ -57,6 +58,7 @@ export default function LocationDetailScreen() {
   const { locationId, name } = useLocalSearchParams<{ locationId: string; name: string }>();
   const { companyId, role } = useCompanyId();
   const insets = useSafeAreaInsets();
+  useLocationAccessGuard(locationId);
 
   const [categories, setCategories] = useState<CategoryWithProducts[]>([]);
   const [loading, setLoading] = useState(true);

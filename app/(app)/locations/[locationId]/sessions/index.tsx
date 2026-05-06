@@ -10,11 +10,21 @@ import {
 } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getSessions, getSessionCounts, createSession, Session } from '@/services/sessions';
+import {
+  getSessions,
+  getSessionCounts,
+  getLatestSessionCount,
+  createSession,
+  Session,
+} from '@/services/sessions';
 import { getLocationProductCount } from '@/services/products';
 import { supabase } from '@/lib/supabase';
+import { useCompanyId } from '@/lib/useCompanyId';
+import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles';
 import { theme, shadows } from '@/constants/theme';
 import { relativeTime } from '@/lib/relativeTime';
+import { useLocationAccessGuard } from '@/lib/useLocationAccess';
+import { displayUser } from '@/lib/userDisplay';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -28,13 +38,19 @@ function formatDate(iso: string) {
 
 export default function SessionsScreen() {
   const { locationId, name } = useLocalSearchParams<{ locationId: string; name: string }>();
+  useLocationAccessGuard(locationId);
+  const { companyId } = useCompanyId();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [productCount, setProductCount] = useState<number | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [activeCounted, setActiveCounted] = useState<number>(0);
   const [activeLastUpdated, setActiveLastUpdated] = useState<string | null>(null);
   const [activeLastBy, setActiveLastBy] = useState<string | null>(null);
+  const [latestCompletedBy, setLatestCompletedBy] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [profilesByUserId, setProfilesByUserId] = useState<Map<string, UserProfile>>(
+    new Map(),
+  );
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
 
@@ -43,6 +59,19 @@ export default function SessionsScreen() {
       setUserId(data.user?.id ?? null);
     });
   }, []);
+
+  useEffect(() => {
+    if (!companyId) return;
+    listCompanyMemberProfiles(companyId)
+      .then((profiles) => {
+        const map = new Map<string, UserProfile>();
+        for (const p of profiles) map.set(p.user_id, p);
+        setProfilesByUserId(map);
+      })
+      .catch(() => {
+        // non-fatal: display falls back to "Team member"
+      });
+  }, [companyId]);
 
   const load = useCallback(async () => {
     if (!locationId) return;
@@ -79,6 +108,14 @@ export default function SessionsScreen() {
         setActiveCounted(0);
         setActiveLastUpdated(null);
         setActiveLastBy(null);
+      }
+
+      const latestCompleted = s.find((row) => row.status === 'completed') ?? null;
+      if (latestCompleted) {
+        const last = await getLatestSessionCount(latestCompleted.id).catch(() => null);
+        setLatestCompletedBy(last?.updated_by ?? null);
+      } else {
+        setLatestCompletedBy(null);
       }
     } catch (err) {
       console.error('[SessionsScreen] load error:', err);
@@ -214,7 +251,7 @@ export default function SessionsScreen() {
                 </Text>
               )}
               <Text style={styles.activeMeta}>
-                Last edited by: {activeLastBy && userId && activeLastBy === userId ? 'You' : 'Team member'}
+                Last edited by: {displayUser(activeLastBy, profilesByUserId, userId)}
               </Text>
 
               <TouchableOpacity
@@ -268,31 +305,39 @@ export default function SessionsScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textLight} />
           </TouchableOpacity>
 
-          {/* ── Previous sessions ────────────────────────────────── */}
-          <Text style={styles.sectionHeader}>PREVIOUS SESSIONS</Text>
-          {pastSessions.length === 0 ? (
+          {/* ── Latest completed session ─────────────────────────── */}
+          <Text style={styles.sectionHeader}>LATEST COMPLETED</Text>
+          {lastCompleted == null ? (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyText}>No previous sessions yet</Text>
               <Text style={styles.emptySubText}>Completed sessions will appear here.</Text>
             </View>
           ) : (
-            <View style={{ gap: 10 }}>
-              {pastSessions.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.sessionRow}
-                  onPress={() => openSession(item)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.sessionRowLeft}>
-                    <Text style={styles.sessionDate}>{formatDate(item.created_at)}</Text>
-                  </View>
-                  <View style={styles.completedBadge}>
-                    <Text style={styles.completedBadgeText}>Completed ✓</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <>
+              <TouchableOpacity
+                style={styles.sessionRow}
+                onPress={() => openSession(lastCompleted)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.sessionRowLeft}>
+                  <Text style={styles.sessionDate}>{formatDate(lastCompleted.created_at)}</Text>
+                  <Text style={styles.sessionMeta}>
+                    Last counted by:{' '}
+                    {displayUser(latestCompletedBy, profilesByUserId, userId)}
+                  </Text>
+                </View>
+                <View style={styles.completedBadge}>
+                  <Text style={styles.completedBadgeText}>Completed ✓</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => Alert.alert('All history', 'All history coming soon.')}
+                style={styles.viewAllBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.viewAllText}>View all history</Text>
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       )}
@@ -471,6 +516,14 @@ const styles = StyleSheet.create({
   },
   sessionRowLeft: { flex: 1 },
   sessionDate: { fontSize: 13, color: theme.colors.textLight, fontWeight: '500' },
+  sessionMeta: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2 },
+  viewAllBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    marginTop: 2,
+  },
+  viewAllText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
   completedBadge: {
     backgroundColor: theme.colors.successBg,
     borderRadius: theme.radius.xs,

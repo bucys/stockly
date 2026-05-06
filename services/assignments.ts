@@ -26,6 +26,21 @@ export async function listAssignments(companyId: string): Promise<Assignment[]> 
   return (data ?? []) as Assignment[];
 }
 
+export async function getMyAssignedLocationIds(): Promise<string[]> {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) return [];
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('employee_location_assignments')
+    .select('location_id, expires_at')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? [])
+    .filter((r) => r.expires_at == null || r.expires_at > nowIso)
+    .map((r) => r.location_id);
+}
+
 export async function listAssignmentsForUser(userId: string): Promise<Assignment[]> {
   const { data, error } = await supabase
     .from('employee_location_assignments')

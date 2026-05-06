@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,9 +24,11 @@ import { Input } from '@/components/ui/Input';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { theme, shadows } from '@/constants/theme';
 import { relativeTime } from '@/lib/relativeTime';
+import { useAssignedLocationIds } from '@/lib/useLocationAccess';
 
 export default function LocationsTab() {
   const { companyId, role, loading: companyLoading, error: companyError } = useCompanyId();
+  const { ids: assignedIds, loading: assignedLoading } = useAssignedLocationIds();
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -118,6 +120,11 @@ export default function LocationsTab() {
     ]);
   }
 
+  const visibleLocations = useMemo(() => {
+    if (assignedIds == null) return locations;
+    return locations.filter((l) => assignedIds.has(l.id));
+  }, [locations, assignedIds]);
+
   if (companyLoading) {
     return (
       <View style={styles.center}>
@@ -140,13 +147,33 @@ export default function LocationsTab() {
 
   const isAdmin = role === 'admin';
 
+  const employeeUnassigned =
+    !isAdmin && !assignedLoading && assignedIds != null && assignedIds.size === 0;
+
+  function handleRequestAccess() {
+    Alert.alert('Access requests', 'Access requests coming soon.');
+  }
+
   return (
     <View style={styles.container}>
-      {loading ? (
+      {loading || assignedLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.primary} />
         </View>
-      ) : locations.length === 0 ? (
+      ) : employeeUnassigned ? (
+        <View style={styles.emptyWrap}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="lock-closed-outline" size={32} color={theme.colors.textMuted} />
+          </View>
+          <Text style={styles.emptyTitle}>No locations assigned</Text>
+          <Text style={styles.emptySub}>
+            Your account has not been added to any locations. Ask an admin for permission.
+          </Text>
+          <View style={styles.emptyBtnWrap}>
+            <Button title="Request access" onPress={handleRequestAccess} variant="ghost" />
+          </View>
+        </View>
+      ) : visibleLocations.length === 0 ? (
         <View style={styles.emptyWrap}>
           <View style={styles.emptyIcon}>
             <Ionicons name="business-outline" size={32} color={theme.colors.textMuted} />
@@ -165,7 +192,7 @@ export default function LocationsTab() {
         </View>
       ) : (
         <FlatList
-          data={locations}
+          data={visibleLocations}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -223,7 +250,7 @@ export default function LocationsTab() {
         />
       )}
 
-      {isAdmin && locations.length > 0 && (
+      {isAdmin && visibleLocations.length > 0 && (
         <TouchableOpacity
           style={styles.fab}
           onPress={openCreate}
