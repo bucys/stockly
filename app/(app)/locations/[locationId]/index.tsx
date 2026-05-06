@@ -37,6 +37,10 @@ import { theme, shadows } from '@/constants/theme';
 import { normalizeCategoryName } from '@/lib/normalizeCategoryName';
 import { normalizeProductName } from '@/lib/normalizeProductName';
 import { parseImportText, type ParsedImportRow } from '@/lib/parseImportText';
+import { parseImportCsv } from '@/lib/parseImportCsv';
+import { parseImportXlsx } from '@/lib/parseImportXlsx';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { ImportReviewSheet } from '@/components/inventory/ImportReviewSheet';
 import { commitImportPlan } from '@/services/importProducts';
 import type { ImportPlan } from '@/lib/importMatchers';
@@ -87,6 +91,8 @@ export default function LocationDetailScreen() {
 
   // Import entry menu
   const [showImportMenu, setShowImportMenu] = useState(false);
+  const [showCsvSheet, setShowCsvSheet] = useState(false);
+  const [pickingCsv, setPickingCsv] = useState(false);
 
   // Paste-text import flow
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -447,6 +453,74 @@ export default function LocationDetailScreen() {
     setShowReview(true);
   }
 
+  async function chooseCsvFile() {
+    if (pickingCsv) return;
+    setPickingCsv(true);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (res.canceled) return;
+      const asset = res.assets?.[0];
+      if (!asset?.uri) {
+        Alert.alert('Import failed', 'Could not read file.');
+        return;
+      }
+      const text = await new File(asset.uri).text();
+      const result = parseImportCsv(text);
+      if (result.rows.length === 0) {
+        Alert.alert(
+          'Nothing to import',
+          'No rows found in the CSV. Expected columns: name, category, unit, qty (optional).',
+        );
+        return;
+      }
+      setParsedRows(result.rows);
+      setShowCsvSheet(false);
+      setShowReview(true);
+    } catch (err) {
+      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setPickingCsv(false);
+    }
+  }
+
+  async function chooseXlsxFile() {
+    if (pickingCsv) return;
+    setPickingCsv(true);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (res.canceled) return;
+      const asset = res.assets?.[0];
+      if (!asset?.uri) {
+        Alert.alert('Import failed', 'Could not read file.');
+        return;
+      }
+      const base64 = await new File(asset.uri).base64();
+      const result = parseImportXlsx(base64);
+      if (result.rows.length === 0) {
+        Alert.alert(
+          'Nothing to import',
+          'No rows found in the spreadsheet. Expected columns: name, category, unit, qty (optional).',
+        );
+        return;
+      }
+      setParsedRows(result.rows);
+      setShowCsvSheet(false);
+      setShowReview(true);
+    } catch (err) {
+      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setPickingCsv(false);
+    }
+  }
+
   async function handleConfirmImport(plan: ImportPlan) {
     if (!locationId) return;
     setCommitting(true);
@@ -510,6 +584,7 @@ export default function LocationDetailScreen() {
   const isEmpty = !loading && visibleCategories.length === 0;
   const noSearchResults = !loading && !isEmpty && searchActive && filteredCategories.length === 0;
 
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -524,38 +599,13 @@ export default function LocationDetailScreen() {
           <ActivityIndicator color={theme.colors.primary} />
         </View>
       ) : isEmpty ? (
-        <View style={styles.center}>
+        <View style={[styles.center, { paddingBottom: 160 + insets.bottom }]}>
           <Text style={styles.emptyTitle}>No products yet</Text>
           <Text style={styles.emptySub}>
             {role === 'admin'
-              ? 'Add your first product — categories are created automatically as you type.'
+              ? 'Add your first product or import products to get started.'
               : 'No products set up yet.'}
           </Text>
-          {role === 'admin' && (
-            <>
-              <TouchableOpacity
-                style={styles.primaryEmptyBtn}
-                onPress={() => openCreateProduct()}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.primaryEmptyBtnText}>+ Add product</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.importEmptyBtn}
-                onPress={openImport}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.importEmptyBtnText}>Copy from another location</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.importEmptyBtn}
-                onPress={openPasteImport}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.importEmptyBtnText}>Import from text</Text>
-              </TouchableOpacity>
-            </>
-          )}
         </View>
       ) : (
         <>
@@ -637,30 +687,30 @@ export default function LocationDetailScreen() {
             })}
 
           </ScrollView>
+        </>
+      )}
 
-          {role === 'admin' && (
+      {!loading && role === 'admin' && (
+        <>
+          <TouchableOpacity
+            style={[styles.fab, { bottom: 80 + insets.bottom }]}
+            onPress={() => openCreateProduct()}
+            activeOpacity={0.9}
+          >
+            <Ionicons name="add" size={22} color="#fff" />
+            <Text style={styles.fabText}>Add product</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.importBar, { paddingBottom: 12 + insets.bottom }]}>
             <TouchableOpacity
-              style={[styles.fab, { bottom: 80 + insets.bottom }]}
-              onPress={() => openCreateProduct()}
-              activeOpacity={0.9}
+              style={styles.importBtn}
+              onPress={() => setShowImportMenu(true)}
+              activeOpacity={0.8}
             >
-              <Ionicons name="add" size={22} color="#fff" />
-              <Text style={styles.fabText}>Add product</Text>
+              <Ionicons name="cloud-download-outline" size={18} color={theme.colors.textSecondary} />
+              <Text style={styles.importBtnText}>Import</Text>
             </TouchableOpacity>
-          )}
-
-          {role === 'admin' && (
-            <View style={[styles.importBar, { paddingBottom: 12 + insets.bottom }]}>
-              <TouchableOpacity
-                style={styles.importBtn}
-                onPress={() => setShowImportMenu(true)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="cloud-download-outline" size={18} color={theme.colors.textSecondary} />
-                <Text style={styles.importBtnText}>Import</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          </View>
         </>
       )}
 
@@ -927,23 +977,61 @@ export default function LocationDetailScreen() {
           <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
         </TouchableOpacity>
 
-        <View style={[styles.importMenuRow, styles.importMenuRowDisabled]}>
-          <Ionicons name="grid-outline" size={20} color={theme.colors.textLight} />
+        <TouchableOpacity
+          style={styles.importMenuRow}
+          onPress={() => {
+            setShowImportMenu(false);
+            setShowCsvSheet(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="document-outline" size={20} color={theme.colors.text} />
           <View style={styles.importMenuTextWrap}>
-            <Text style={[styles.importMenuTitle, styles.importMenuTitleDisabled]}>Import from CSV</Text>
-            <Text style={styles.importMenuSub}>Coming soon</Text>
+            <Text style={styles.importMenuTitle}>Import from File</Text>
+            <Text style={styles.importMenuSub}>CSV, XLSX or PDF.</Text>
           </View>
-        </View>
-
-        <View style={[styles.importMenuRow, styles.importMenuRowDisabled]}>
-          <Ionicons name="document-attach-outline" size={20} color={theme.colors.textLight} />
-          <View style={styles.importMenuTextWrap}>
-            <Text style={[styles.importMenuTitle, styles.importMenuTitleDisabled]}>Import from PDF</Text>
-            <Text style={styles.importMenuSub}>Coming soon</Text>
-          </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
+        </TouchableOpacity>
 
         <Button title="Cancel" onPress={() => setShowImportMenu(false)} variant="ghost" />
+      </ModalSheet>
+
+      {/* ── Import File sheet ─────────────────────────────────────────────── */}
+      <ModalSheet
+        visible={showCsvSheet}
+        onClose={() => {
+          if (pickingCsv) return;
+          setShowCsvSheet(false);
+        }}
+        scrollable
+        maxHeight="60%"
+      >
+        <Text style={styles.sheetTitle}>Import File</Text>
+        <Text style={styles.pasteHint}>
+          Choose a file to import products.{'\n'}
+          Expected columns: name, category, unit, qty (optional).
+        </Text>
+        <Button
+          title={pickingCsv ? 'Opening…' : 'Choose CSV file'}
+          onPress={chooseCsvFile}
+          disabled={pickingCsv}
+        />
+        <Button
+          title={pickingCsv ? 'Opening…' : 'Choose XLSX file'}
+          onPress={chooseXlsxFile}
+          disabled={pickingCsv}
+        />
+        <Button
+          title="Choose PDF file (coming soon)"
+          onPress={() => {}}
+          disabled
+        />
+        <Button
+          title="Cancel"
+          onPress={() => setShowCsvSheet(false)}
+          variant="ghost"
+          disabled={pickingCsv}
+        />
       </ModalSheet>
 
       {/* ── Paste-text import modal ───────────────────────────────────────── */}

@@ -234,13 +234,6 @@ export default function SessionsScreen() {
               <Text style={styles.noProductsSub}>
                 Add products before starting an inventory session.
               </Text>
-              <TouchableOpacity
-                style={styles.goToProductsBtn}
-                onPress={openProducts}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.goToProductsBtnText}>Manage products</Text>
-              </TouchableOpacity>
             </View>
           ) : activeSession ? null : (
             <TouchableOpacity
