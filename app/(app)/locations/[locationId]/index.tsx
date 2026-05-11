@@ -455,12 +455,32 @@ export default function LocationDetailScreen() {
     setShowReview(true);
   }
 
+  function fileKindFromAsset(
+    asset: { name?: string | null; mimeType?: string | null },
+  ): 'csv' | 'xlsx' | 'pdf' | 'unknown' {
+    const name = (asset.name ?? '').toLowerCase();
+    const mime = (asset.mimeType ?? '').toLowerCase();
+    if (name.endsWith('.csv') || mime === 'text/csv' || mime === 'text/comma-separated-values') {
+      return 'csv';
+    }
+    if (
+      name.endsWith('.xlsx') ||
+      name.endsWith('.xls') ||
+      mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      mime === 'application/vnd.ms-excel'
+    ) {
+      return 'xlsx';
+    }
+    if (name.endsWith('.pdf') || mime === 'application/pdf') return 'pdf';
+    return 'unknown';
+  }
+
   async function chooseCsvFile() {
     if (pickingCsv) return;
     setPickingCsv(true);
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', '*/*'],
         copyToCacheDirectory: true,
         multiple: false,
       });
@@ -470,8 +490,32 @@ export default function LocationDetailScreen() {
         Alert.alert('Import failed', 'Could not read file.');
         return;
       }
-      const text = await new File(asset.uri).text();
-      const result = parseImportCsv(text);
+      if (fileKindFromAsset(asset) !== 'csv') {
+        Alert.alert('Wrong file type', 'Please choose a CSV file.');
+        return;
+      }
+      let text: string;
+      try {
+        text = await new File(asset.uri).text();
+      } catch (err) {
+        console.warn('[chooseCsvFile] read error:', err);
+        Alert.alert(
+          'Import failed',
+          "We couldn't read this file. Please check the file type and try again.",
+        );
+        return;
+      }
+      let result;
+      try {
+        result = parseImportCsv(text);
+      } catch (err) {
+        console.warn('[chooseCsvFile] parse error:', err);
+        Alert.alert(
+          'Import failed',
+          "We couldn't read this file. Please check the file type and try again.",
+        );
+        return;
+      }
       if (result.rows.length === 0) {
         Alert.alert(
           'Nothing to import',
@@ -483,7 +527,11 @@ export default function LocationDetailScreen() {
       setShowCsvSheet(false);
       setShowReview(true);
     } catch (err) {
-      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+      console.warn('[chooseCsvFile] unexpected:', err);
+      Alert.alert(
+        'Import failed',
+        "We couldn't read this file. Please check the file type and try again.",
+      );
     } finally {
       setPickingCsv(false);
     }
@@ -494,7 +542,11 @@ export default function LocationDetailScreen() {
     setPickingCsv(true);
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
+        type: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+          '*/*',
+        ],
         copyToCacheDirectory: true,
         multiple: false,
       });
@@ -504,8 +556,32 @@ export default function LocationDetailScreen() {
         Alert.alert('Import failed', 'Could not read file.');
         return;
       }
-      const base64 = await new File(asset.uri).base64();
-      const result = parseImportXlsx(base64);
+      if (fileKindFromAsset(asset) !== 'xlsx') {
+        Alert.alert('Wrong file type', 'Please choose an Excel file.');
+        return;
+      }
+      let base64: string;
+      try {
+        base64 = await new File(asset.uri).base64();
+      } catch (err) {
+        console.warn('[chooseXlsxFile] read error:', err);
+        Alert.alert(
+          'Import failed',
+          "We couldn't read this file. Please check the file type and try again.",
+        );
+        return;
+      }
+      let result;
+      try {
+        result = parseImportXlsx(base64);
+      } catch (err) {
+        console.warn('[chooseXlsxFile] parse error:', err);
+        Alert.alert(
+          'Import failed',
+          "We couldn't read this file. Please check the file type and try again.",
+        );
+        return;
+      }
       if (result.rows.length === 0) {
         Alert.alert(
           'Nothing to import',
@@ -517,7 +593,11 @@ export default function LocationDetailScreen() {
       setShowCsvSheet(false);
       setShowReview(true);
     } catch (err) {
-      Alert.alert('Import failed', err instanceof Error ? err.message : 'Unknown error');
+      console.warn('[chooseXlsxFile] unexpected:', err);
+      Alert.alert(
+        'Import failed',
+        "We couldn't read this file. Please check the file type and try again.",
+      );
     } finally {
       setPickingCsv(false);
     }

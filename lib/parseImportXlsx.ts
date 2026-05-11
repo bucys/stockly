@@ -24,20 +24,35 @@ function parseQuantity(raw: string): { value: number | null; valid: boolean } {
 }
 
 export function parseImportXlsx(base64: string): ParseResult {
-  const wb = XLSX.read(base64, { type: 'base64' });
-  const firstSheetName = wb.SheetNames[0];
+  if (!base64 || typeof base64 !== 'string') return { rows: [], skippedLines: 0 };
+  let wb: XLSX.WorkBook;
+  try {
+    wb = XLSX.read(base64, { type: 'base64' });
+  } catch (err) {
+    console.warn('[parseImportXlsx] read error:', err);
+    return { rows: [], skippedLines: 0 };
+  }
+  const firstSheetName = wb.SheetNames?.[0];
   if (!firstSheetName) return { rows: [], skippedLines: 0 };
-  const sheet = wb.Sheets[firstSheetName];
+  const sheet = wb.Sheets?.[firstSheetName];
+  if (!sheet) return { rows: [], skippedLines: 0 };
   // header: 1 → array of arrays. defval: '' → keep empty cells as ''. blankrows: false → drop fully empty rows.
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
-    raw: true,
-  });
+  let aoa: unknown[][];
+  try {
+    aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      defval: '',
+      blankrows: false,
+      raw: true,
+    });
+  } catch (err) {
+    console.warn('[parseImportXlsx] sheet_to_json error:', err);
+    return { rows: [], skippedLines: 0 };
+  }
+  if (!Array.isArray(aoa) || aoa.length === 0) return { rows: [], skippedLines: 0 };
 
   const rowsTrimmed: string[][] = aoa.map((row) =>
-    trimEdges(row.map((c) => cellToString(c).trim())),
+    trimEdges((Array.isArray(row) ? row : []).map((c) => cellToString(c).trim())),
   );
 
   let headerMap: Record<ColumnKey, number> | null = null;

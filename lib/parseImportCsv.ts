@@ -190,8 +190,25 @@ export function parseImportCsv(input: string): ParseResult {
   const rows: ParsedImportRow[] = [];
   let skippedLines = 0;
 
+  if (typeof input !== 'string' || input.length === 0) {
+    return { rows: [], skippedLines: 0 };
+  }
+
   // Strip UTF-8 BOM if present.
   const cleaned = input.replace(/^﻿/, '');
+
+  // Reject obviously binary content (e.g. user picked an XLSX/PDF while
+  // expecting CSV). Sample the first 1KB and bail if >5% control chars.
+  const sample = cleaned.slice(0, 1024);
+  if (sample.length > 0) {
+    let control = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const code = sample.charCodeAt(i);
+      if (code === 0) return { rows: [], skippedLines: 0 };
+      if (code < 9 || (code > 13 && code < 32)) control++;
+    }
+    if (control / sample.length > 0.05) return { rows: [], skippedLines: 0 };
+  }
 
   // Detect delimiter from first non-empty line for the qty-decimal logic below.
   const firstNonEmpty =
