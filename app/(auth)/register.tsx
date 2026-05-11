@@ -24,7 +24,11 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
-    if (!companyName || !displayName.trim() || !email || !password) {
+    if (!displayName.trim()) {
+      Alert.alert('Missing name', 'Please enter your name.');
+      return;
+    }
+    if (!companyName || !email || !password) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }

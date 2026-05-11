@@ -24,7 +24,11 @@ export default function JoinScreen() {
   const [loading, setLoading] = useState(false);
 
   async function handleJoin() {
-    if (!joinCode.trim() || !displayName.trim() || !email.trim() || !password) {
+    if (!displayName.trim()) {
+      Alert.alert('Missing name', 'Please enter your name.');
+      return;
+    }
+    if (!joinCode.trim() || !email.trim() || !password) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }

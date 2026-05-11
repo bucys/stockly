@@ -26,12 +26,10 @@ import { theme, shadows } from '@/constants/theme';
 import { relativeTime } from '@/lib/relativeTime';
 import { useAssignedLocationIds } from '@/lib/useLocationAccess';
 import {
-  createAccessRequest,
   listMyAccessRequests,
-  listRequestableLocations,
   type AccessRequest,
-  type RequestableLocation,
 } from '@/services/accessRequests';
+import { RequestAccessSheet } from '@/components/access/RequestAccessSheet';
 
 export default function LocationsTab() {
   const { companyId, role, loading: companyLoading, error: companyError } = useCompanyId();
@@ -44,14 +42,17 @@ export default function LocationsTab() {
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Access requests (employee with no assigned locations)
+  // Access requests
   const [showRequestSheet, setShowRequestSheet] = useState(false);
-  const [requestLocationId, setRequestLocationId] = useState<string | null>(null);
-  const [requestReason, setRequestReason] = useState('');
-  const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [myRequests, setMyRequests] = useState<AccessRequest[]>([]);
-  const [requestableLocations, setRequestableLocations] = useState<RequestableLocation[]>([]);
-  const [requestableLoading, setRequestableLoading] = useState(false);
+
+  const refreshMyRequests = useCallback(() => {
+    listMyAccessRequests()
+      .then(setMyRequests)
+      .catch(() => {
+        // non-critical
+      });
+  }, []);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -141,21 +142,10 @@ export default function LocationsTab() {
     return locations.filter((l) => assignedIds.has(l.id));
   }, [locations, assignedIds]);
 
-  const pendingRequestLocationIds = useMemo(
-    () => new Set(myRequests.filter((r) => r.status === 'pending').map((r) => r.location_id)),
-    [myRequests],
-  );
-
   useEffect(() => {
-    const isUnassigned =
-      role !== 'admin' && !assignedLoading && assignedIds != null && assignedIds.size === 0;
-    if (!isUnassigned) return;
-    listMyAccessRequests()
-      .then(setMyRequests)
-      .catch(() => {
-        // non-critical
-      });
-  }, [role, assignedLoading, assignedIds]);
+    if (role === 'admin' || assignedLoading) return;
+    refreshMyRequests();
+  }, [role, assignedLoading, refreshMyRequests]);
 
   if (companyLoading) {
     return (
@@ -183,36 +173,7 @@ export default function LocationsTab() {
     !isAdmin && !assignedLoading && assignedIds != null && assignedIds.size === 0;
 
   function openRequestSheet() {
-    setRequestLocationId(null);
-    setRequestReason('');
     setShowRequestSheet(true);
-    setRequestableLoading(true);
-    listRequestableLocations()
-      .then(setRequestableLocations)
-      .catch((err) => {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to load locations');
-      })
-      .finally(() => setRequestableLoading(false));
-  }
-
-  async function submitAccessRequest() {
-    if (!requestLocationId) return;
-    setRequestSubmitting(true);
-    try {
-      await createAccessRequest(requestLocationId, requestReason);
-      setShowRequestSheet(false);
-      const refreshed = await listMyAccessRequests();
-      setMyRequests(refreshed);
-      Alert.alert('Request sent', 'An admin will review your request shortly.');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to submit request';
-      const friendly = /duplicate|unique/i.test(msg)
-        ? 'You already have a pending request for this location.'
-        : msg;
-      Alert.alert('Error', friendly);
-    } finally {
-      setRequestSubmitting(false);
-    }
   }
 
   return (
@@ -263,6 +224,20 @@ export default function LocationsTab() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          ListFooterComponent={
+            !isAdmin ? (
+              <TouchableOpacity
+                style={styles.requestFooter}
+                onPress={openRequestSheet}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.requestFooterText}>
+                  Need another location? Request access
+                </Text>
+              </TouchableOpacity>
+            ) : null
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
@@ -360,63 +335,12 @@ export default function LocationsTab() {
         <Button title="Cancel" onPress={() => setShowModal(false)} variant="ghost" />
       </ModalSheet>
 
-      <ModalSheet
+      <RequestAccessSheet
         visible={showRequestSheet}
         onClose={() => setShowRequestSheet(false)}
-        scrollable
-        maxHeight="85%"
-      >
-        <Text style={styles.sheetTitle}>Request access</Text>
-        <Text style={styles.requestSub}>Choose a location to request access to.</Text>
-        {requestableLoading ? (
-          <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 16 }} />
-        ) : requestableLocations.length === 0 ? (
-          <Text style={styles.requestEmpty}>No locations available.</Text>
-        ) : (
-          requestableLocations.map((loc) => {
-            const selected = requestLocationId === loc.id;
-            const pending = pendingRequestLocationIds.has(loc.id);
-            return (
-              <TouchableOpacity
-                key={loc.id}
-                style={styles.requestLocRow}
-                onPress={() => !pending && setRequestLocationId(loc.id)}
-                disabled={pending}
-                activeOpacity={0.7}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.requestLocName}>{loc.name}</Text>
-                  {pending ? (
-                    <Text style={styles.requestPending}>Pending</Text>
-                  ) : loc.address ? (
-                    <Text style={styles.requestLocAddress}>{loc.address}</Text>
-                  ) : null}
-                </View>
-                <View style={[styles.radio, selected && styles.radioOn]}>
-                  {selected && <View style={styles.radioDot} />}
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
-        <Input
-          placeholder="Reason (optional)"
-          value={requestReason}
-          onChangeText={setRequestReason}
-          multiline
-        />
-        <Button
-          title="Send request"
-          onPress={submitAccessRequest}
-          loading={requestSubmitting}
-          disabled={!requestLocationId}
-        />
-        <Button
-          title="Cancel"
-          onPress={() => setShowRequestSheet(false)}
-          variant="ghost"
-        />
-      </ModalSheet>
+        assignedLocationIds={assignedIds ?? undefined}
+        onSubmitted={refreshMyRequests}
+      />
     </View>
   );
 }
@@ -535,32 +459,17 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     marginBottom: 12,
   },
-  requestSub: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
-  requestEmpty: { fontSize: 13, color: theme.colors.textMuted, paddingVertical: 12 },
-  requestLocRow: {
+  requestFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  requestLocName: { fontSize: 15, fontWeight: '500', color: theme.colors.text },
-  requestLocAddress: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  requestPending: { fontSize: 12, color: theme.colors.textLight, marginTop: 2 },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 16,
+    marginTop: 8,
   },
-  radioOn: { borderColor: theme.colors.primary },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: theme.colors.primary,
+  requestFooterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.colors.primary,
   },
 });
