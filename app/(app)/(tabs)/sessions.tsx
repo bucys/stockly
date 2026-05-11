@@ -361,9 +361,7 @@ export default function SessionsTab() {
                   ))}
                 </View>
                 <TouchableOpacity
-                  onPress={() =>
-                    Alert.alert('All history', 'All history coming soon.')
-                  }
+                  onPress={() => router.push('/sessions/history')}
                   style={styles.viewAllBtn}
                   activeOpacity={0.7}
                 >

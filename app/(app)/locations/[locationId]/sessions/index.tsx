@@ -331,7 +331,9 @@ export default function SessionsScreen() {
                 </View>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => Alert.alert('All history', 'All history coming soon.')}
+                onPress={() =>
+                  router.push(`/sessions/history?locationId=${locationId}`)
+                }
                 style={styles.viewAllBtn}
                 activeOpacity={0.7}
               >

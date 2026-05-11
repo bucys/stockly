@@ -79,88 +79,172 @@ export function RequestAccessSheet({
     (l) => !assignedLocationIds || !assignedLocationIds.has(l.id),
   );
 
+  const showForm = !loading && requestable.length > 0;
+
   return (
     <ModalSheet visible={visible} onClose={onClose} scrollable maxHeight="85%">
       <Text style={styles.title}>Request access</Text>
-      <Text style={styles.sub}>Choose a location to request access to.</Text>
+      <Text style={styles.sub}>Pick a location to request access to.</Text>
 
       {loading ? (
-        <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 16 }} />
+        <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 20 }} />
       ) : requestable.length === 0 ? (
-        <Text style={styles.empty}>No additional locations to request.</Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>
+            You&apos;re already assigned to all locations.
+          </Text>
+        </View>
       ) : (
-        requestable.map((loc) => {
-          const selected = selectedId === loc.id;
-          const pending = pendingIds.has(loc.id);
-          return (
-            <TouchableOpacity
-              key={loc.id}
-              style={styles.row}
-              onPress={() => !pending && setSelectedId(loc.id)}
-              disabled={pending}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{loc.name}</Text>
-                {pending ? (
-                  <Text style={styles.pending}>Pending</Text>
-                ) : loc.address ? (
-                  <Text style={styles.address}>{loc.address}</Text>
-                ) : null}
-              </View>
-              <View style={[styles.radio, selected && styles.radioOn]}>
-                {selected && <View style={styles.radioDot} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })
+        <View style={styles.group}>
+          {requestable.map((loc, idx) => {
+            const selected = selectedId === loc.id;
+            const pending = pendingIds.has(loc.id);
+            return (
+              <TouchableOpacity
+                key={loc.id}
+                style={[
+                  styles.row,
+                  idx < requestable.length - 1 && styles.rowDivider,
+                  selected && styles.rowSelected,
+                  pending && styles.rowDisabled,
+                ]}
+                onPress={() => !pending && setSelectedId(loc.id)}
+                disabled={pending}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name} numberOfLines={1}>{loc.name}</Text>
+                  {pending ? (
+                    <Text style={styles.pending}>Pending</Text>
+                  ) : loc.address ? (
+                    <Text style={styles.address} numberOfLines={1}>{loc.address}</Text>
+                  ) : null}
+                </View>
+                <View style={[styles.radio, selected && styles.radioOn]}>
+                  {selected && <View style={styles.radioDot} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       )}
 
-      <Input
-        placeholder="Reason (optional)"
-        value={reason}
-        onChangeText={setReason}
-        multiline
-      />
-      <Button
-        title="Send request"
-        onPress={submit}
-        loading={submitting}
-        disabled={!selectedId}
-      />
-      <Button title="Cancel" onPress={onClose} variant="ghost" />
+      {showForm && (
+        <>
+          <Input
+            placeholder="Reason (optional)"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            style={styles.reasonInput}
+          />
+          <View style={styles.footer}>
+            <Button
+              title="Send request"
+              onPress={submit}
+              loading={submitting}
+              disabled={!selectedId}
+              style={{ marginBottom: 0 }}
+            />
+            <TouchableOpacity
+              onPress={onClose}
+              activeOpacity={0.7}
+              style={styles.cancelBtn}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {!showForm && !loading && (
+        <TouchableOpacity
+          onPress={onClose}
+          activeOpacity={0.7}
+          style={styles.cancelBtn}
+        >
+          <Text style={styles.cancelText}>Close</Text>
+        </TouchableOpacity>
+      )}
     </ModalSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
-  sub: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
-  empty: { fontSize: 13, color: theme.colors.textMuted, paddingVertical: 12 },
+  title: { fontSize: 18, fontWeight: '700', color: theme.colors.text, marginBottom: 2 },
+  sub: { fontSize: 12, color: theme.colors.textMuted, marginBottom: 14 },
+
+  emptyWrap: {
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
+
+  group: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    overflow: 'hidden',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 48,
+  },
+  rowDivider: {
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
   },
-  name: { fontSize: 15, fontWeight: '500', color: theme.colors.text },
-  address: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  pending: { fontSize: 12, color: theme.colors.textLight, marginTop: 2 },
+  rowSelected: {
+    backgroundColor: theme.colors.surfaceWarm,
+  },
+  rowDisabled: { opacity: 0.55 },
+
+  name: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  address: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+  pending: { fontSize: 11, color: theme.colors.textLight, marginTop: 1 },
+
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
   radioOn: { borderColor: theme.colors.primary },
   radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: theme.colors.primary,
+  },
+
+  reasonInput: {
+    marginTop: 12,
+    minHeight: 44,
+  },
+
+  footer: {
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  cancelText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    fontWeight: '500',
   },
 });
