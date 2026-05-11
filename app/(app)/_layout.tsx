@@ -17,6 +17,7 @@ export default function AppLayout() {
       <Stack.Screen name="locations/[locationId]/index" />
       <Stack.Screen name="locations/[locationId]/sessions/index" />
       <Stack.Screen name="locations/[locationId]/sessions/[sessionId]" />
+      <Stack.Screen name="employees/index" />
     </Stack>
   );
 }
