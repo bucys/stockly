@@ -4,6 +4,8 @@ export interface ExportRow {
   unit: string;
   previousQty: number | null;
   currentQty: number | null;
+  countedBy: string | null;
+  countedAt: string | null;
 }
 
 function escapeCSV(value: string | number | null): string {
@@ -50,10 +52,11 @@ export function buildCSV(
     `Location: ${locationName}`,
     `Exported: ${exportedDt}`,
     '',
-    'Category,Product,Unit,Previous Qty,Current Qty,Difference',
+    'Category,Product,Unit,Previous Qty,Current Qty,Difference,Counted by,Counted at',
   ];
 
   const lines = rows.map((row) => {
+    const countedAt = row.countedAt ? formatDateTime(new Date(row.countedAt)) : '';
     return [
       escapeCSV(row.category),
       escapeCSV(row.product),
@@ -61,6 +64,8 @@ export function buildCSV(
       escapeCSV(row.previousQty),
       escapeCSV(row.currentQty),
       escapeCSV(formatDifference(row.previousQty, row.currentQty)),
+      escapeCSV(row.countedBy ?? ''),
+      escapeCSV(countedAt),
     ].join(',');
   });
 

@@ -26,6 +26,7 @@ import {
   Session,
 } from '@/services/sessions';
 import { buildCSV, ExportRow } from '@/services/export';
+import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles';
 import { Button } from '@/components/ui/Button';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { theme, shadows } from '@/constants/theme';
@@ -94,7 +95,7 @@ export default function CountingScreen() {
   }>();
   useLocationAccessGuard(locationId);
 
-  const { role } = useCompanyId();
+  const { companyId, role } = useCompanyId();
   const insets = useSafeAreaInsets();
 
   const [sections, setSections] = useState<Section[]>([]);
@@ -104,6 +105,9 @@ export default function CountingScreen() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [profilesByUserId, setProfilesByUserId] = useState<Map<string, UserProfile>>(
+    new Map(),
+  );
 
   // Search + filter
   const [search, setSearch] = useState('');
@@ -121,6 +125,20 @@ export default function CountingScreen() {
       setUserId(data.user?.id ?? null);
     });
   }, []);
+
+  // Profiles for export attribution (best-effort)
+  useEffect(() => {
+    if (!companyId) return;
+    listCompanyMemberProfiles(companyId)
+      .then((list) => {
+        const map = new Map<string, UserProfile>();
+        for (const p of list) map.set(p.user_id, p);
+        setProfilesByUserId(map);
+      })
+      .catch(() => {
+        // non-critical
+      });
+  }, [companyId]);
 
   const load = useCallback(async () => {
     if (!locationId || !sessionId) return;
@@ -311,7 +329,22 @@ export default function CountingScreen() {
     setInputValue('');
   }
 
-  async function handleSave() {
+  function findNextProduct(
+    currentId: string,
+    updatedSections: Section[],
+  ): ProductWithCount | null {
+    const flat = updatedSections.flatMap((s) => s.data);
+    const idx = flat.findIndex((p) => p.id === currentId);
+    if (idx === -1) return null;
+    // Prefer next uncounted after current position.
+    for (let i = idx + 1; i < flat.length; i++) {
+      if (flat[i].count === null) return flat[i];
+    }
+    // Fall back to the next product in order, regardless of counted state.
+    return flat[idx + 1] ?? null;
+  }
+
+  async function handleSave(advance: boolean = false) {
     if (!selected || !sessionId || !userId) return;
     const qty = parseFloat(inputValue);
     if (isNaN(qty) || qty < 0) {
@@ -335,16 +368,26 @@ export default function CountingScreen() {
       const newMap = new Map(countsMap);
       newMap.set(selected.id, newCount);
       setCountsMap(newMap);
-      setSections((prev) =>
-        prev.map((sec) => ({
-          ...sec,
-          data: sec.data.map((p) =>
-            p.id === selected.id ? { ...p, count: newCount } : p,
-          ),
-        })),
-      );
+      const updatedSections = sections.map((sec) => ({
+        ...sec,
+        data: sec.data.map((p) =>
+          p.id === selected.id ? { ...p, count: newCount } : p,
+        ),
+      }));
+      setSections(updatedSections);
 
-      closeModal();
+      if (advance) {
+        const next = findNextProduct(selected.id, updatedSections);
+        if (next) {
+          setSelected(next);
+          setInputValue(next.count !== null ? String(next.count.quantity) : '');
+        } else {
+          closeModal();
+          Alert.alert('Reached end of session', 'No more products to count.');
+        }
+      } else {
+        closeModal();
+      }
     } catch (err) {
       console.error('[CountingScreen] save count error:', err);
       Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save count');
@@ -359,6 +402,14 @@ export default function CountingScreen() {
       return;
     }
 
+    const resolveCountedBy = (uid: string | null | undefined): string | null => {
+      if (!uid) return null;
+      const p = profilesByUserId.get(uid);
+      const name = p?.display_name?.trim();
+      const email = p?.email?.trim();
+      return name || email || 'Team member';
+    };
+
     const rows: ExportRow[] = sections.flatMap((sec) =>
       sec.data.map((p) => ({
         category: sec.title,
@@ -366,6 +417,8 @@ export default function CountingScreen() {
         unit: p.unit,
         previousQty: p.lastKnownQty,
         currentQty: p.count?.quantity ?? null,
+        countedBy: p.count ? resolveCountedBy(p.count.updated_by) : null,
+        countedAt: p.count?.updated_at ?? null,
       })),
     );
 
@@ -607,7 +660,10 @@ export default function CountingScreen() {
           stickySectionHeadersEnabled={false}
           contentContainerStyle={[
             styles.list,
-            (isCompleted || !isCompleted) && styles.listWithFooter,
+            {
+              paddingBottom:
+                (isCompleted ? 96 : 150) + Math.max(insets.bottom, 12),
+            },
           ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           keyboardShouldPersistTaps="handled"
@@ -682,25 +738,39 @@ export default function CountingScreen() {
 
         <Numpad onKey={handleNumpadKey} disabled={saving} />
 
-        <TouchableOpacity
-          style={[
-            styles.numpadSaveBtn,
-            (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
-          ]}
-          onPress={handleSave}
-          disabled={!isValidQty(inputValue) || saving}
-          activeOpacity={0.85}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.numpadSaveBtnText}>
-              {isValidQty(inputValue)
-                ? `Save — ${inputValue} ${selected?.unit ?? ''}`.trim()
-                : 'Save'}
-            </Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.saveRow}>
+          <TouchableOpacity
+            style={[
+              styles.saveSecondaryBtn,
+              (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+            ]}
+            onPress={() => handleSave(false)}
+            disabled={!isValidQty(inputValue) || saving}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.saveSecondaryText}>Save</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.numpadSaveBtn,
+              styles.savePrimaryBtn,
+              (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+            ]}
+            onPress={() => handleSave(true)}
+            disabled={!isValidQty(inputValue) || saving}
+            activeOpacity={0.85}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.numpadSaveBtnText}>
+                {isValidQty(inputValue)
+                  ? `Save & Next — ${inputValue} ${selected?.unit ?? ''}`.trim()
+                  : 'Save & Next'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ModalSheet>
     </View>
   );
@@ -763,7 +833,6 @@ const styles = StyleSheet.create({
 
   // List
   list: { paddingBottom: 32 },
-  listWithFooter: { paddingBottom: 140 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1030,6 +1099,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
+  saveRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  saveSecondaryBtn: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveSecondaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  savePrimaryBtn: { flex: 1, marginTop: 0 },
   numpadSaveBtnDisabled: {
     backgroundColor: '#C4BAB2',
   },
