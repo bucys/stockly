@@ -18,9 +18,13 @@ import { getLocations, type Location } from '@/services/locations';
 import { listEmployeesWithAssignments } from '@/services/assignments';
 import {
   upsertMyProfile,
+  getProfile,
   listCompanyMemberProfiles,
   type UserProfile,
 } from '@/services/profiles';
+import { ModalSheet } from '@/components/ui/ModalSheet';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
 import {
   listPendingAccessRequests,
   approveAccessRequest,
@@ -35,6 +39,13 @@ export default function ProfileTab() {
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+
+  // Current user's profile (display name + email)
+  const [myEmail, setMyEmail] = useState<string | null>(null);
+  const [myDisplayName, setMyDisplayName] = useState<string | null>(null);
+  const [showNameEditor, setShowNameEditor] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   // Admin-only data: employee count for the row, locations + profiles for
   // access request rendering, pending requests themselves.
@@ -54,14 +65,21 @@ export default function ProfileTab() {
   }, [role, companyId]);
 
   // Ensure the current user has a profile row with their email mirrored from
-  // auth. Best-effort: failures are non-fatal.
+  // auth, then load it into local state. Best-effort: failures are non-fatal.
   useEffect(() => {
     (async () => {
       try {
         const { data: auth } = await supabase.auth.getUser();
+        const userId = auth.user?.id;
         const email = auth.user?.email ?? null;
-        if (!auth.user) return;
+        if (!userId) return;
+        setMyEmail(email);
         await upsertMyProfile({ email });
+        const me = await getProfile(userId);
+        if (me) {
+          setMyDisplayName(me.display_name);
+          if (me.email) setMyEmail(me.email);
+        }
       } catch {
         // ignore — profile sync is non-critical
       }
@@ -131,6 +149,28 @@ export default function ProfileTab() {
     return locations.find((l) => l.id === locationId)?.name ?? 'Unknown location';
   }
 
+  function openNameEditor() {
+    setNameDraft(myDisplayName ?? '');
+    setShowNameEditor(true);
+  }
+
+  async function saveDisplayName() {
+    setSavingName(true);
+    try {
+      const trimmed = nameDraft.trim();
+      const next = trimmed === '' ? null : trimmed;
+      await upsertMyProfile({ displayName: next, email: myEmail });
+      setMyDisplayName(next);
+      setShowNameEditor(false);
+      // Refresh admin caches so attribution updates immediately.
+      if (role === 'admin' && companyId) loadAdminData();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save display name');
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   async function handleSignOut() {
     setSigningOut(true);
     try {
@@ -165,6 +205,40 @@ export default function ProfileTab() {
       {/* Role badge */}
       <View style={styles.roleBadge}>
         <Text style={styles.roleText}>{role === 'admin' ? 'Admin' : 'Employee'}</Text>
+      </View>
+
+      {/* Account details */}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>ACCOUNT DETAILS</Text>
+        <View style={styles.detailsCard}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Display name</Text>
+            <Text
+              style={[
+                styles.detailValue,
+                !myDisplayName && styles.detailValueEmpty,
+              ]}
+              numberOfLines={1}
+            >
+              {myDisplayName ?? 'Not set'}
+            </Text>
+          </View>
+          <View style={styles.detailDivider} />
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Email</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {myEmail ?? '—'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.detailEditBtn}
+            onPress={openNameEditor}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="pencil" size={14} color={theme.colors.primary} />
+            <Text style={styles.detailEditText}>Edit display name</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Admin: join code section */}
@@ -274,6 +348,31 @@ export default function ProfileTab() {
         </TouchableOpacity>
       </View>
 
+      <ModalSheet
+        visible={showNameEditor}
+        onClose={() => !savingName && setShowNameEditor(false)}
+        avoidKeyboard
+        maxHeight="60%"
+      >
+        <Text style={styles.editorTitle}>Edit display name</Text>
+        <Text style={styles.editorSub}>
+          Leave empty to clear — your email will be shown instead.
+        </Text>
+        <Input
+          placeholder="Display name"
+          value={nameDraft}
+          onChangeText={setNameDraft}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={saveDisplayName}
+        />
+        <Button title="Save" onPress={saveDisplayName} loading={savingName} />
+        <Button
+          title="Cancel"
+          onPress={() => setShowNameEditor(false)}
+          variant="ghost"
+        />
+      </ModalSheet>
     </ScrollView>
   );
 }
@@ -341,6 +440,48 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   signOutTextDisabled: { color: theme.colors.textLight },
+
+  detailsCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: 16,
+    ...shadows.sm,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    gap: 12,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  detailValueEmpty: { fontWeight: '400', color: theme.colors.textLight },
+  detailDivider: {
+    height: 1,
+    backgroundColor: theme.colors.borderLight,
+    marginVertical: 6,
+  },
+  detailEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
+  detailEditText: { color: theme.colors.primary, fontSize: 14, fontWeight: '600' },
+
+  editorTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 6 },
+  editorSub: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
 
   navRow: {
     flexDirection: 'row',
