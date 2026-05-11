@@ -20,9 +20,6 @@ export async function getSourceLocations(
   companyId: string,
   excludeLocationId: string,
 ): Promise<SourceLocation[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  console.log('[getSourceLocations] user_id:', user?.id ?? 'null', 'company_id:', companyId);
-
   const { data, error } = await supabase
     .from('locations')
     .select('id, name, categories(id, products(id))')
@@ -30,15 +27,11 @@ export async function getSourceLocations(
     .neq('id', excludeLocationId)
     .order('name');
 
-  if (error) {
-    console.error('[getSourceLocations] error:', error.message, error);
-    throw error;
-  }
+  if (error) throw error;
 
   return (data ?? []).map((loc: any) => {
     const cats: any[] = loc.categories ?? [];
     const productCount = cats.reduce((s: number, c: any) => s + (c.products?.length ?? 0), 0);
-    console.log('[getSourceLocations] loc id:', loc.id, 'name:', loc.name, 'cats:', cats.length, 'products:', productCount);
     return { id: loc.id as string, name: loc.name as string, categoryCount: cats.length, productCount };
   });
 }
@@ -59,72 +52,37 @@ export async function importSetup({
   selectedCategories: CategoryWithProducts[];
   mode: ImportMode;
 }): Promise<ImportResult> {
-  const { data: { user } } = await supabase.auth.getUser();
-  console.log('[importSetup] user_id:', user?.id ?? 'null', 'company_id:', companyId);
-
-  // ── Defensive ownership checks ────────────────────────────────────────────────
-  // Both locations must belong to companyId. This guards against any case where
-  // the caller passes a locationId from another company (e.g. stale state, tampered params).
-  const { data: srcLoc, error: srcErr } = await supabase
+  // Defensive ownership checks: both locations must belong to companyId.
+  // Guards against stale state / tampered params.
+  const { data: srcLoc } = await supabase
     .from('locations')
-    .select('id, company_id')
+    .select('id')
     .eq('id', sourceLocationId)
     .eq('company_id', companyId)
     .maybeSingle();
+  if (!srcLoc) throw new Error('Source location does not belong to your company');
 
-  if (srcErr || !srcLoc) {
-    console.error(
-      '[importSetup] SECURITY BLOCK: source location', sourceLocationId,
-      'does not belong to company', companyId,
-      '— user:', user?.id ?? 'null',
-      '— db error:', srcErr?.message ?? 'no row returned',
-    );
-    throw new Error('Source location does not belong to your company');
-  }
-
-  const { data: tgtLoc, error: tgtErr } = await supabase
+  const { data: tgtLoc } = await supabase
     .from('locations')
-    .select('id, company_id')
+    .select('id')
     .eq('id', targetLocationId)
     .eq('company_id', companyId)
     .maybeSingle();
-
-  if (tgtErr || !tgtLoc) {
-    console.error(
-      '[importSetup] SECURITY BLOCK: target location', targetLocationId,
-      'does not belong to company', companyId,
-      '— user:', user?.id ?? 'null',
-      '— db error:', tgtErr?.message ?? 'no row returned',
-    );
-    throw new Error('Target location does not belong to your company');
-  }
-
-  console.log(
-    '[importSetup] ownership verified — source:', sourceLocationId,
-    'target:', targetLocationId,
-    'mode:', mode,
-    'categories:', selectedCategories.length,
-    'products:', selectedCategories.reduce((s, c) => s + c.products.length, 0),
-  );
+  if (!tgtLoc) throw new Error('Target location does not belong to your company');
 
   let categoriesCreated = 0;
   let productsCreated = 0;
 
-  // ── Replace: wipe target first ──────────────────────────────────────────────
+  // Replace: wipe target first.
   if (mode === 'replace') {
-    console.log('[importSetup] replace — deleting existing categories (products cascade)');
     const { error } = await supabase
       .from('categories')
       .delete()
       .eq('location_id', targetLocationId);
-    if (error) {
-      console.error('[importSetup] delete error:', error.message, error);
-      throw new Error(`Replace failed: ${error.message}`);
-    }
-    console.log('[importSetup] existing data cleared');
+    if (error) throw new Error(`Replace failed: ${error.message}`);
   }
 
-  // ── Load existing target categories once (used for duplicate check in add mode) ──
+  // Load existing target categories once (used for duplicate check in add mode).
   const existingCatByNorm = new Map<string, string>();
   if (mode === 'add') {
     const { data: existing } = await supabase
@@ -132,17 +90,14 @@ export async function importSetup({
       .select('id, name')
       .eq('location_id', targetLocationId);
     (existing ?? []).forEach((c) => existingCatByNorm.set(normalizeCategoryName(c.name), c.id));
-    console.log('[importSetup] existing category names in target:', existingCatByNorm.size);
   }
 
-  // ── Process each selected category ──────────────────────────────────────────
   for (const sourceCat of selectedCategories) {
     let targetCatId: string;
     const sourceNorm = normalizeCategoryName(sourceCat.name);
     const existingId = mode === 'add' ? existingCatByNorm.get(sourceNorm) : undefined;
 
     if (existingId) {
-      console.log('[importSetup] category already exists, merging into:', sourceCat.name);
       targetCatId = existingId;
     } else {
       const { data: newCat, error: catErr } = await supabase
@@ -151,17 +106,15 @@ export async function importSetup({
         .select('id')
         .single();
       if (catErr || !newCat) {
-        console.error('[importSetup] category insert error:', catErr?.message, sourceCat.name);
+        console.warn('[importSetup] category insert failed:', catErr?.message, sourceCat.name);
         continue;
       }
       targetCatId = newCat.id;
       categoriesCreated++;
-      console.log('[importSetup] created category:', sourceCat.name);
     }
 
     if (sourceCat.products.length === 0) continue;
 
-    // Duplicate product check within this category
     const existingProductNames = new Set<string>();
     if (mode === 'add') {
       const { data: ep } = await supabase
@@ -180,20 +133,15 @@ export async function importSetup({
         last_known_quantity: null,
       }));
 
-    if (newProducts.length === 0) {
-      console.log('[importSetup] all products in category already exist:', sourceCat.name);
-      continue;
-    }
+    if (newProducts.length === 0) continue;
 
     const { error: prodErr } = await supabase.from('products').insert(newProducts);
     if (prodErr) {
-      console.error('[importSetup] products batch insert error:', prodErr.message, 'category:', sourceCat.name);
+      console.warn('[importSetup] products insert failed:', prodErr.message, sourceCat.name);
       continue;
     }
     productsCreated += newProducts.length;
-    console.log('[importSetup] inserted', newProducts.length, 'products into:', sourceCat.name);
   }
 
-  console.log('[importSetup] done — categories created:', categoriesCreated, 'products created:', productsCreated);
   return { categoriesCreated, productsCreated };
 }

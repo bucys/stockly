@@ -170,8 +170,6 @@ export default function CountingScreen() {
         setSessionCreatedAt(sessionRows.created_at);
       }
 
-      const total = categories.reduce((sum, c) => sum + c.products.length, 0);
-      console.log('[CountingScreen] loaded — products:', total, 'counted:', counts.length, 'status:', sessionRows?.status);
     } catch (err) {
       console.error('[CountingScreen] load error:', err);
       Alert.alert('Error', 'Failed to load session data');
@@ -186,8 +184,6 @@ export default function CountingScreen() {
 
   useEffect(() => {
     if (!sessionId) return;
-
-    console.log('[CountingScreen] realtime — subscribing for session:', sessionId);
 
     const channel = supabase
       .channel(`session-counts:${sessionId}`)
@@ -204,12 +200,6 @@ export default function CountingScreen() {
 
           // Cast is safe: INSERT/UPDATE always carry the full row
           const row = payload.new as unknown as CountRow;
-          console.log(
-            '[CountingScreen] realtime —', payload.eventType,
-            'product:', row.product_id,
-            'qty:', row.quantity,
-            'by:', row.updated_by,
-          );
 
           setCountsMap((prev) => {
             const next = new Map(prev);
@@ -235,16 +225,11 @@ export default function CountingScreen() {
           );
         },
       )
-      .subscribe((status, err) => {
-        if (err) {
-          console.error('[CountingScreen] realtime — error:', err.message);
-        } else {
-          console.log('[CountingScreen] realtime — status:', status);
-        }
+      .subscribe((_status, err) => {
+        if (err) console.warn('[CountingScreen] realtime error:', err.message);
       });
 
     return () => {
-      console.log('[CountingScreen] realtime — unsubscribing for session:', sessionId);
       supabase.removeChannel(channel);
     };
   }, [sessionId]);
@@ -436,11 +421,9 @@ export default function CountingScreen() {
     const filename = `inventory-${locationSlug}-${dateSlug}.csv`;
     const file = new File(Paths.cache, filename);
 
-    console.log('[handleExport] writing CSV, rows:', rows.length, 'file:', file.uri);
     setExporting(true);
     try {
       file.write(csv);
-      console.log('[handleExport] file written');
 
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
@@ -452,7 +435,6 @@ export default function CountingScreen() {
         dialogTitle: 'Export Inventory CSV',
         UTI: 'public.comma-separated-values-text',
       });
-      console.log('[handleExport] share sheet opened');
     } catch (err) {
       console.error('[handleExport] error:', err);
       Alert.alert('Export failed', err instanceof Error ? err.message : 'Unknown error');

@@ -12,20 +12,13 @@ export async function signUp(
   companyName: string,
   displayName?: string,
 ) {
-  console.log('[signUp] starting for:', email);
-
   const trimmedName = displayName?.trim() || undefined;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: trimmedName ? { data: { display_name: trimmedName } } : undefined,
   });
-  if (error) {
-    console.error('[signUp] auth error:', error.message, 'status:', (error as { status?: number }).status, error);
-    throw error;
-  }
-
-  console.log('[signUp] auth ok — user:', data.user?.id ?? 'null', 'session:', data.session ? 'present' : 'null');
+  if (error) throw error;
 
   if (!data.user) {
     throw new Error('Sign up succeeded but no user was returned. Email confirmation may be required — confirm your email first, then sign in.');
@@ -40,10 +33,7 @@ export async function signUp(
     .limit(1)
     .maybeSingle();
 
-  if (existingMember?.company_id) {
-    console.log('[signUp] membership already exists for user:', data.user.id, '— skipping company creation');
-    return data;
-  }
+  if (existingMember?.company_id) return data;
 
   const { data: company, error: companyError } = await supabase
     .from('companies')
@@ -51,17 +41,13 @@ export async function signUp(
     .select()
     .single();
   if (companyError) {
-    console.error('[signUp] companies insert failed:', companyError.message, 'code:', companyError.code, 'hint:', companyError.hint, companyError);
     throw new Error(`Company creation failed: ${companyError.message} (code: ${companyError.code})`);
   }
-
-  console.log('[signUp] company created:', company.id);
 
   const { error: memberError } = await supabase
     .from('company_members')
     .insert({ user_id: data.user.id, company_id: company.id, role: 'admin' });
   if (memberError) {
-    console.error('[signUp] company_members insert failed:', memberError.message, 'code:', memberError.code, 'hint:', memberError.hint, memberError);
     throw new Error(`Member setup failed: ${memberError.message} (code: ${memberError.code})`);
   }
 
@@ -82,18 +68,12 @@ export async function signUp(
     }
   }
 
-  console.log('[signUp] done — member created');
   return data;
 }
 
 export async function signOut() {
-  console.log('[signOut] starting');
   const { error } = await supabase.auth.signOut();
-  if (error) {
-    console.error('[signOut] error:', error.message, error);
-    throw error;
-  }
-  console.log('[signOut] success');
+  if (error) throw error;
 }
 
 export async function getSession() {
@@ -108,26 +88,19 @@ export async function joinCompany(
   joinCode: string,
   displayName?: string,
 ) {
-  console.log('[joinCompany] starting for:', email);
-
   const trimmedName = displayName?.trim() || undefined;
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: trimmedName ? { data: { display_name: trimmedName } } : undefined,
   });
-  if (error) {
-    console.error('[joinCompany] auth.signUp error:', error.message, error);
-    throw error;
-  }
+  if (error) throw error;
 
   if (!data.user) {
     throw new Error(
       'Account created — please confirm your email then sign in to complete joining.',
     );
   }
-
-  console.log('[joinCompany] user created:', data.user.id);
 
   // Idempotency: if a membership already exists (e.g. previous partial join),
   // skip the RPC and proceed — the app will load their existing company.
@@ -137,22 +110,15 @@ export async function joinCompany(
     .eq('user_id', data.user.id)
     .maybeSingle();
 
-  if (existing?.company_id) {
-    console.log('[joinCompany] membership already exists:', existing.company_id);
-    return data;
-  }
+  if (existing?.company_id) return data;
 
   const { data: result, error: rpcError } = await supabase.rpc('join_company_by_code', {
     p_join_code: joinCode.trim().toUpperCase(),
   });
 
-  if (rpcError) {
-    console.error('[joinCompany] rpc error:', rpcError.message, rpcError);
-    throw new Error(`Join failed: ${rpcError.message}`);
-  }
+  if (rpcError) throw new Error(`Join failed: ${rpcError.message}`);
 
   const res = result as { error?: string; company_id?: string };
-  console.log('[joinCompany] rpc result:', JSON.stringify(res));
 
   if (res.error === 'not_authenticated') {
     throw new Error('Authentication error. Please confirm your email then sign in.');
@@ -160,13 +126,8 @@ export async function joinCompany(
   if (res.error === 'invalid_code') {
     throw new Error('Invalid join code. Ask your admin for the correct code.');
   }
-  if (res.error === 'already_member') {
-    console.log('[joinCompany] already_member — proceeding');
-    return data;
-  }
-  if (res.error) {
-    throw new Error(`Join failed: ${res.error}`);
-  }
+  if (res.error === 'already_member') return data;
+  if (res.error) throw new Error(`Join failed: ${res.error}`);
 
   if (trimmedName && data.session) {
     try {
@@ -181,6 +142,5 @@ export async function joinCompany(
     }
   }
 
-  console.log('[joinCompany] joined company:', res.company_id);
   return data;
 }

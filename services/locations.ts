@@ -9,16 +9,12 @@ export interface Location {
 }
 
 export async function getLocations(companyId: string): Promise<Location[]> {
-  console.log('[getLocations] fetching for company_id:', companyId);
   const { data, error } = await supabase
     .from('locations')
     .select('id, name, address')
     .eq('company_id', companyId)
     .order('name');
-  if (error) {
-    console.error('[getLocations] error:', error.message, 'code:', error.code, error);
-    throw error;
-  }
+  if (error) throw error;
   const base = (data ?? []) as Array<{ id: string; name: string; address: string | null }>;
   if (base.length === 0) return [];
 
@@ -36,7 +32,6 @@ export async function getLocations(companyId: string): Promise<Location[]> {
     productCount: productCounts.get(l.id) ?? 0,
     lastCompletedSessionAt: lastSessions.get(l.id) ?? null,
   }));
-  console.log('[getLocations] result count:', result.length);
   return result;
 }
 
@@ -46,10 +41,7 @@ async function fetchProductCounts(locationIds: string[]): Promise<Map<string, nu
     .from('categories')
     .select('location_id, products(count)')
     .in('location_id', locationIds);
-  if (error) {
-    console.error('[getLocations] product count error:', error.message);
-    return counts;
-  }
+  if (error) return counts;
   type Row = { location_id: string; products: Array<{ count: number }> | null };
   for (const row of (data ?? []) as Row[]) {
     const n = row.products?.[0]?.count ?? 0;
@@ -66,10 +58,7 @@ async function fetchLastCompletedSessions(locationIds: string[]): Promise<Map<st
     .in('location_id', locationIds)
     .eq('status', 'completed')
     .order('created_at', { ascending: false });
-  if (error) {
-    console.error('[getLocations] last session error:', error.message);
-    return last;
-  }
+  if (error) return last;
   type Row = { location_id: string; created_at: string };
   for (const row of (data ?? []) as Row[]) {
     if (!last.has(row.location_id)) {
@@ -84,17 +73,14 @@ export async function createLocation(
   name: string,
   address?: string,
 ): Promise<{ id: string; name: string; address: string | null }> {
-  console.log('[createLocation] payload:', { company_id: companyId, name, address });
   const { data, error } = await supabase
     .from('locations')
     .insert({ company_id: companyId, name, address: address?.trim() || null })
     .select('id, name, address')
     .single();
   if (error) {
-    console.error('[createLocation] error:', error.message, 'code:', error.code, 'hint:', error.hint, error);
     throw new Error(`Location creation failed: ${error.message} (code: ${error.code})`);
   }
-  console.log('[createLocation] success, id:', data.id);
   return data;
 }
 
