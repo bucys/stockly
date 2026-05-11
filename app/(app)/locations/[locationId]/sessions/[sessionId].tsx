@@ -336,12 +336,16 @@ export default function CountingScreen() {
     const flat = updatedSections.flatMap((s) => s.data);
     const idx = flat.findIndex((p) => p.id === currentId);
     if (idx === -1) return null;
-    // Prefer next uncounted after current position.
+    // Prefer next uncounted after the current position.
     for (let i = idx + 1; i < flat.length; i++) {
       if (flat[i].count === null) return flat[i];
     }
-    // Fall back to the next product in order, regardless of counted state.
-    return flat[idx + 1] ?? null;
+    // Wrap: scan from the beginning up to (but excluding) the current index.
+    for (let i = 0; i < idx; i++) {
+      if (flat[i].count === null) return flat[i];
+    }
+    // No uncounted product remains → end of session.
+    return null;
   }
 
   async function handleSave(advance: boolean = false) {
