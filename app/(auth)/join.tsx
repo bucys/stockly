@@ -18,12 +18,13 @@ import { theme } from '@/constants/theme';
 
 export default function JoinScreen() {
   const [joinCode, setJoinCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleJoin() {
-    if (!joinCode.trim() || !email.trim() || !password) {
+    if (!joinCode.trim() || !displayName.trim() || !email.trim() || !password) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }
@@ -33,7 +34,7 @@ export default function JoinScreen() {
     }
     setLoading(true);
     try {
-      await joinCompany(email.trim(), password, joinCode.trim());
+      await joinCompany(email.trim(), password, joinCode.trim(), displayName.trim());
       router.replace('/');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : JSON.stringify(err);
@@ -78,6 +79,15 @@ export default function JoinScreen() {
                 returnKeyType="next"
               />
 
+              <Text style={styles.label}>YOUR NAME</Text>
+              <Input
+                placeholder="e.g. Jonas"
+                value={displayName}
+                onChangeText={setDisplayName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+
               <Text style={styles.label}>EMAIL</Text>
               <Input
                 placeholder="you@company.com"
@@ -107,7 +117,7 @@ export default function JoinScreen() {
               title="Join team"
               onPress={handleJoin}
               loading={loading}
-              disabled={!joinCode.trim() || !email.trim() || !password}
+              disabled={!joinCode.trim() || !displayName.trim() || !email.trim() || !password}
               style={{ marginBottom: 0 }}
             />
           </View>

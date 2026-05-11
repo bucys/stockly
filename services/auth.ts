@@ -6,10 +6,20 @@ export async function signIn(email: string, password: string) {
   return data;
 }
 
-export async function signUp(email: string, password: string, companyName: string) {
+export async function signUp(
+  email: string,
+  password: string,
+  companyName: string,
+  displayName?: string,
+) {
   console.log('[signUp] starting for:', email);
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const trimmedName = displayName?.trim() || undefined;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: trimmedName ? { data: { display_name: trimmedName } } : undefined,
+  });
   if (error) {
     console.error('[signUp] auth error:', error.message, 'status:', (error as { status?: number }).status, error);
     throw error;
@@ -55,6 +65,23 @@ export async function signUp(email: string, password: string, companyName: strin
     throw new Error(`Member setup failed: ${memberError.message} (code: ${memberError.code})`);
   }
 
+  // Best-effort write of display_name into user_profiles. Only works if the
+  // session is active right now (e.g. email confirmation disabled). When email
+  // confirmation is on, the Profile sync effect later picks up the metadata
+  // value on first login.
+  if (trimmedName && data.session) {
+    try {
+      await supabase
+        .from('user_profiles')
+        .upsert(
+          { user_id: data.user.id, display_name: trimmedName, email: data.user.email ?? null },
+          { onConflict: 'user_id' },
+        );
+    } catch (e) {
+      console.warn('[signUp] user_profiles upsert skipped:', (e as Error).message);
+    }
+  }
+
   console.log('[signUp] done — member created');
   return data;
 }
@@ -75,10 +102,20 @@ export async function getSession() {
   return data.session;
 }
 
-export async function joinCompany(email: string, password: string, joinCode: string) {
+export async function joinCompany(
+  email: string,
+  password: string,
+  joinCode: string,
+  displayName?: string,
+) {
   console.log('[joinCompany] starting for:', email);
 
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const trimmedName = displayName?.trim() || undefined;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: trimmedName ? { data: { display_name: trimmedName } } : undefined,
+  });
   if (error) {
     console.error('[joinCompany] auth.signUp error:', error.message, error);
     throw error;
@@ -129,6 +166,19 @@ export async function joinCompany(email: string, password: string, joinCode: str
   }
   if (res.error) {
     throw new Error(`Join failed: ${res.error}`);
+  }
+
+  if (trimmedName && data.session) {
+    try {
+      await supabase
+        .from('user_profiles')
+        .upsert(
+          { user_id: data.user.id, display_name: trimmedName, email: data.user.email ?? null },
+          { onConflict: 'user_id' },
+        );
+    } catch (e) {
+      console.warn('[joinCompany] user_profiles upsert skipped:', (e as Error).message);
+    }
   }
 
   console.log('[joinCompany] joined company:', res.company_id);

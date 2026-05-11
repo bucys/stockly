@@ -18,12 +18,13 @@ import { theme } from '@/constants/theme';
 
 export default function RegisterScreen() {
   const [companyName, setCompanyName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
-    if (!companyName || !email || !password) {
+    if (!companyName || !displayName.trim() || !email || !password) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }
@@ -33,7 +34,7 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      await signUp(email.trim(), password, companyName.trim());
+      await signUp(email.trim(), password, companyName.trim(), displayName.trim());
       Alert.alert(
         'Account created',
         'Check your email to confirm your account, then sign in.',
@@ -74,6 +75,15 @@ export default function RegisterScreen() {
                 placeholder="e.g. Acme Warehouse"
                 value={companyName}
                 onChangeText={setCompanyName}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+
+              <Text style={styles.label}>YOUR NAME</Text>
+              <Input
+                placeholder="e.g. Jonas"
+                value={displayName}
+                onChangeText={setDisplayName}
                 autoCapitalize="words"
                 returnKeyType="next"
               />

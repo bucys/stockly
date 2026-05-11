@@ -76,10 +76,19 @@ export default function ProfileTab() {
         setMyEmail(email);
         await upsertMyProfile({ email });
         const me = await getProfile(userId);
-        if (me) {
+        // If the profile has no display_name yet but auth metadata captured
+        // one at register/join time, promote it now.
+        const metaName =
+          typeof auth.user?.user_metadata?.display_name === 'string'
+            ? (auth.user.user_metadata.display_name as string).trim()
+            : '';
+        if (me && !me.display_name && metaName) {
+          await upsertMyProfile({ displayName: metaName, email });
+          setMyDisplayName(metaName);
+        } else if (me) {
           setMyDisplayName(me.display_name);
-          if (me.email) setMyEmail(me.email);
         }
+        if (me?.email) setMyEmail(me.email);
       } catch {
         // ignore — profile sync is non-critical
       }

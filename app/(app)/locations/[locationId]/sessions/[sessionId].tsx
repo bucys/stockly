@@ -490,22 +490,64 @@ export default function CountingScreen() {
 
   async function handleComplete() {
     if (!sessionId) return;
+
+    const performComplete = async () => {
+      try {
+        await completeSession(sessionId);
+        setSessionStatus('completed');
+      } catch {
+        Alert.alert('Error', 'Failed to complete session');
+      }
+    };
+
+    if (counted === 0) {
+      Alert.alert(
+        'No products counted',
+        'You have not counted any products. This session will not be completed.',
+        [
+          { text: 'Go back', style: 'cancel' },
+          {
+            text: 'Cancel session',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await cancelSession(sessionId);
+                if (router.canGoBack()) router.back();
+                else router.replace('/(app)/(tabs)');
+              } catch (err) {
+                Alert.alert(
+                  'Error',
+                  err instanceof Error ? err.message : 'Failed to cancel session',
+                );
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    const uncounted = total - counted;
+    if (uncounted > 0) {
+      Alert.alert(
+        'Some products were not counted',
+        `${uncounted} product${uncounted === 1 ? '' : 's'} ${
+          uncounted === 1 ? 'was' : 'were'
+        } not counted. Uncounted products will remain unchanged.`,
+        [
+          { text: 'Go back', style: 'cancel' },
+          { text: 'Complete anyway', style: 'destructive', onPress: performComplete },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       'Complete session?',
       `${counted} of ${total} products counted (${pct}%). Mark session as complete?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            try {
-              await completeSession(sessionId);
-              setSessionStatus('completed');
-            } catch (err) {
-              Alert.alert('Error', 'Failed to complete session');
-            }
-          },
-        },
+        { text: 'Complete', onPress: performComplete },
       ],
     );
   }
@@ -672,14 +714,15 @@ export default function CountingScreen() {
 
       {!isCompleted && !loading && sections.length > 0 && (
         <View style={[styles.bottomFooter, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}>
+          <Text style={styles.progressHint}>
+            {counted} / {total} counted
+          </Text>
           <TouchableOpacity
             style={styles.finishBtn}
             onPress={handleComplete}
             activeOpacity={0.85}
           >
-            <Text style={styles.finishBtnText}>
-              Finish session ({counted}/{total})
-            </Text>
+            <Text style={styles.finishBtnText}>Finish session</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.cancelBtn}
@@ -997,6 +1040,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
+  },
+  progressHint: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   finishBtn: {
     backgroundColor: theme.colors.primary,
