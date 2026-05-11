@@ -69,7 +69,6 @@ export default function ProfileTab() {
 
   const loadEmployees = useCallback(async () => {
     if (!companyId || role !== 'admin') return;
-    console.log('[profile] loadEmployees start', { companyId, role });
     setEmployeesLoading(true);
 
     // Run independently. Profile lookup is optional — its failure must NOT
@@ -81,10 +80,8 @@ export default function ProfileTab() {
     ]);
 
     if (empsRes.status === 'fulfilled') {
-      console.log('[profile] employees:', empsRes.value.length);
       setEmployees(empsRes.value);
     } else {
-      console.log('[profile] employees error:', empsRes.reason);
       Alert.alert(
         'Error',
         empsRes.reason instanceof Error ? empsRes.reason.message : 'Failed to load employees',
@@ -92,19 +89,13 @@ export default function ProfileTab() {
     }
 
     if (locsRes.status === 'fulfilled') {
-      console.log('[profile] locations:', locsRes.value.length);
       setLocations(locsRes.value);
-    } else {
-      console.log('[profile] locations error:', locsRes.reason);
     }
 
     if (profilesRes.status === 'fulfilled') {
-      console.log('[profile] profiles:', profilesRes.value.length);
       const map = new Map<string, UserProfile>();
       for (const p of profilesRes.value) map.set(p.user_id, p);
       setProfilesByUserId(map);
-    } else {
-      console.log('[profile] profiles error (display will fall back to uuid):', profilesRes.reason);
     }
 
     setEmployeesLoading(false);
