@@ -26,6 +26,12 @@ import {
   listCompanyMemberProfiles,
   type UserProfile,
 } from '@/services/profiles';
+import {
+  listPendingAccessRequests,
+  approveAccessRequest,
+  rejectAccessRequest,
+  type AccessRequest,
+} from '@/services/accessRequests';
 import { supabase } from '@/lib/supabase';
 import { theme, shadows } from '@/constants/theme';
 
@@ -45,6 +51,10 @@ export default function ProfileTab() {
   const [editingEmployee, setEditingEmployee] =
     useState<EmployeeWithAssignments | null>(null);
   const [assignmentSaving, setAssignmentSaving] = useState<string | null>(null);
+
+  // Pending access requests
+  const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
+  const [requestDeciding, setRequestDeciding] = useState<string | null>(null);
 
   useEffect(() => {
     if (role === 'admin' && companyId) {
@@ -73,10 +83,11 @@ export default function ProfileTab() {
 
     // Run independently. Profile lookup is optional — its failure must NOT
     // blank out the employees list.
-    const [empsRes, locsRes, profilesRes] = await Promise.allSettled([
+    const [empsRes, locsRes, profilesRes, requestsRes] = await Promise.allSettled([
       listEmployeesWithAssignments(companyId),
       getLocations(companyId),
       listCompanyMemberProfiles(companyId),
+      listPendingAccessRequests(companyId),
     ]);
 
     if (empsRes.status === 'fulfilled') {
@@ -96,6 +107,10 @@ export default function ProfileTab() {
       const map = new Map<string, UserProfile>();
       for (const p of profilesRes.value) map.set(p.user_id, p);
       setProfilesByUserId(map);
+    }
+
+    if (requestsRes.status === 'fulfilled') {
+      setPendingRequests(requestsRes.value);
     }
 
     setEmployeesLoading(false);
@@ -161,6 +176,26 @@ export default function ProfileTab() {
     );
   }
 
+  async function decideRequest(req: AccessRequest, decision: 'approve' | 'reject') {
+    setRequestDeciding(req.id);
+    try {
+      if (decision === 'approve') {
+        await approveAccessRequest(req.id);
+      } else {
+        await rejectAccessRequest(req.id);
+      }
+      await loadEmployees();
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to update request');
+    } finally {
+      setRequestDeciding(null);
+    }
+  }
+
+  function locationName(locationId: string): string {
+    return locations.find((l) => l.id === locationId)?.name ?? 'Unknown location';
+  }
+
   async function handleSignOut() {
     setSigningOut(true);
     try {
@@ -218,6 +253,51 @@ export default function ProfileTab() {
               <ActivityIndicator color={theme.colors.primary} />
             )}
           </View>
+        </View>
+      )}
+
+      {/* Admin: pending access requests */}
+      {role === 'admin' && pendingRequests.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>ACCESS REQUESTS</Text>
+          {pendingRequests.map((req) => {
+            const deciding = requestDeciding === req.id;
+            return (
+              <View key={req.id} style={styles.requestRow}>
+                <View style={styles.requestRowTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.requestEmployee}>{displayFor(req.user_id)}</Text>
+                    <Text style={styles.requestLocation}>{locationName(req.location_id)}</Text>
+                    {req.reason ? (
+                      <Text style={styles.requestReason}>“{req.reason}”</Text>
+                    ) : null}
+                  </View>
+                </View>
+                <View style={styles.requestActions}>
+                  <TouchableOpacity
+                    style={[styles.requestBtn, styles.requestReject]}
+                    onPress={() => decideRequest(req, 'reject')}
+                    disabled={deciding}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.requestRejectText}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.requestBtn, styles.requestApprove]}
+                    onPress={() => decideRequest(req, 'approve')}
+                    disabled={deciding}
+                    activeOpacity={0.7}
+                  >
+                    {deciding ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.requestApproveText}>Approve</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -451,4 +531,41 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
+
+  requestRow: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: 14,
+    marginBottom: 8,
+    ...shadows.sm,
+  },
+  requestRowTop: { marginBottom: 10 },
+  requestEmployee: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  requestLocation: {
+    fontSize: 13,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+  },
+  requestReason: {
+    fontSize: 12,
+    color: theme.colors.textLight,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  requestActions: { flexDirection: 'row', gap: 8 },
+  requestBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestApprove: { backgroundColor: theme.colors.primary },
+  requestApproveText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  requestReject: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  requestRejectText: { color: theme.colors.text, fontSize: 14, fontWeight: '600' },
 });
