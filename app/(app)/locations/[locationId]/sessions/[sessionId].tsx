@@ -274,14 +274,16 @@ export default function CountingScreen() {
       .filter((sec) => sec.data.length > 0);
   }, [sections, search, filter]);
 
-  // Hide products inside collapsed categories without removing the section header
-  const displaySections = useMemo<Section[]>(
-    () =>
-      filteredSections.map((sec) =>
-        collapsedIds.has(sec.id) ? { ...sec, data: [] as ProductWithCount[] } : sec,
-      ),
-    [filteredSections, collapsedIds],
-  );
+  // Hide products inside collapsed categories without removing the section
+  // header — except when a search is active, in which case the user expects
+  // matches to be visible without manually expanding each category.
+  const displaySections = useMemo<Section[]>(() => {
+    const searchActive = search.trim() !== '';
+    if (searchActive) return filteredSections;
+    return filteredSections.map((sec) =>
+      collapsedIds.has(sec.id) ? { ...sec, data: [] as ProductWithCount[] } : sec,
+    );
+  }, [filteredSections, collapsedIds, search]);
 
   function toggleCategory(id: string) {
     setCollapsedIds((prev) => {
@@ -649,17 +651,28 @@ export default function CountingScreen() {
       {/* Search + filter toolbar */}
       {!loading && sections.length > 0 && (
         <View style={styles.toolbar}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products or categories…"
-            placeholderTextColor={theme.colors.textPlaceholder}
-            value={search}
-            onChangeText={setSearch}
-            clearButtonMode="while-editing"
-            returnKeyType="search"
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
+          <View style={styles.searchWrap}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products or categories…"
+              placeholderTextColor={theme.colors.textPlaceholder}
+              value={search}
+              onChangeText={setSearch}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearch('')}
+                style={styles.searchClear}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={16} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.filterRow}>
             {(['all', 'uncounted', 'counted'] as FilterTab[]).map((tab) => (
               <TouchableOpacity
@@ -713,6 +726,7 @@ export default function CountingScreen() {
           ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         />
       )}
 
@@ -959,13 +973,22 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
     gap: 10,
   },
+  searchWrap: { position: 'relative', justifyContent: 'center' },
   searchInput: {
     height: 42,
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.sm,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 36,
     fontSize: 15,
     color: theme.colors.text,
+  },
+  searchClear: {
+    position: 'absolute',
+    right: 10,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   filterChip: {

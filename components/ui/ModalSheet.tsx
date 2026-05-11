@@ -21,6 +21,13 @@ interface ModalSheetProps {
   avoidKeyboard?: boolean;
   sheetStyle?: ViewStyle;
   keyboardVerticalOffset?: number;
+  /**
+   * Extra bottom padding inside the sheet content. Default is small (24) so
+   * forms don't leave a tall blank area below inputs when the keyboard is
+   * open. Use a larger value only for sheets where content sits above
+   * persistent overlays (FAB, tab bar, etc.).
+   */
+  contentBottomPadding?: number;
 }
 
 export function ModalSheet({
@@ -32,6 +39,7 @@ export function ModalSheet({
   avoidKeyboard = true,
   sheetStyle,
   keyboardVerticalOffset = 0,
+  contentBottomPadding = 24,
 }: ModalSheetProps) {
   function handleClose() {
     Keyboard.dismiss();
@@ -40,17 +48,23 @@ export function ModalSheet({
 
   const sheetContent = scrollable ? (
     <ScrollView
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomPadding }]}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
-      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      // The outer KeyboardAvoidingView already lifts the sheet above the
+      // keyboard. Adding automaticallyAdjustKeyboardInsets on top stacks a
+      // second keyboard-sized inset and creates a scrollable blank area
+      // under short forms.
+      automaticallyAdjustKeyboardInsets={false}
       bounces={false}
     >
       {children}
     </ScrollView>
   ) : (
-    <View style={styles.sheetContent}>{children}</View>
+    <View style={[styles.sheetContent, { paddingBottom: contentBottomPadding }]}>
+      {children}
+    </View>
   );
 
   const sheet = (
@@ -111,12 +125,10 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     paddingHorizontal: theme.spacing.xl,
-    paddingBottom: 120,
     paddingTop: 2,
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.xl,
-    paddingBottom: 120,
     paddingTop: 2,
   },
 });
