@@ -107,14 +107,23 @@ export function ImportReviewSheet({
     <ModalSheet visible={visible} onClose={onClose} scrollable maxHeight="95%">
       <Text style={styles.title}>Review import</Text>
       <Text style={styles.summary}>
-        {summary.total} rows · {summary.included} included · {summary.excluded} skipped
+        {summary.included} {summary.included === 1 ? 'product' : 'products'} ready to import
       </Text>
+      {summary.excluded > 0 && (
+        <Text style={styles.summarySub}>{summary.excluded} skipped</Text>
+      )}
 
-      <View style={styles.toggleRow}>
+      <TouchableOpacity
+        style={styles.toggleRow}
+        onPress={() => setApplyQuantities((v) => !v)}
+        activeOpacity={0.7}
+      >
         <View style={styles.toggleLeft}>
-          <Text style={styles.toggleLabel}>Update last known quantities from import</Text>
+          <Text style={styles.toggleLabel}>Update stock quantities</Text>
           <Text style={styles.toggleHint}>
-            Off: quantities are imported as draft only. On: overwrite product last_known_quantity.
+            {applyQuantities
+              ? 'Imported quantities will overwrite current stock.'
+              : 'Products will be imported without changing stock.'}
           </Text>
         </View>
         <Switch
@@ -122,7 +131,7 @@ export function ImportReviewSheet({
           onValueChange={setApplyQuantities}
           trackColor={{ false: theme.colors.borderLight, true: theme.colors.primary }}
         />
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.list}>
         {drafts.map((row, index) => {
@@ -168,70 +177,63 @@ export function ImportReviewSheet({
                 )}
               </View>
 
-              <Text style={styles.fieldLabel}>Name</Text>
               <TextInput
-                style={styles.input}
+                style={styles.nameInput}
                 value={row.name}
                 onChangeText={(v) => updateRow(index, { name: v })}
                 placeholder="Product name"
                 placeholderTextColor={theme.colors.textPlaceholder}
               />
 
-              <View style={styles.fieldRow}>
-                <View style={styles.fieldGrow}>
-                  <Text style={styles.fieldLabel}>Category</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={row.categoryName}
-                    onChangeText={(v) => updateRow(index, { categoryName: v })}
-                    placeholder="Category"
-                    placeholderTextColor={theme.colors.textPlaceholder}
-                  />
-                  {row.matchedCategoryDisplayName &&
-                  row.matchedCategoryDisplayName !== row.categoryName ? (
-                    <Text style={styles.hint}>
-                      Matches existing "{row.matchedCategoryDisplayName}"
-                    </Text>
-                  ) : row.matchedCategoryId == null && row.categoryName.trim() !== '' ? (
-                    <Text style={styles.hint}>Will create new category</Text>
-                  ) : null}
-                </View>
+              <View style={styles.categoryRow}>
+                <TextInput
+                  style={[styles.input, styles.categoryInput]}
+                  value={row.categoryName}
+                  onChangeText={(v) => updateRow(index, { categoryName: v })}
+                  placeholder="Category"
+                  placeholderTextColor={theme.colors.textPlaceholder}
+                />
+                {row.matchedCategoryId == null && row.categoryName.trim() !== '' && (
+                  <View style={styles.newPill}>
+                    <Text style={styles.newPillText}>NEW</Text>
+                  </View>
+                )}
               </View>
+              {row.matchedCategoryDisplayName &&
+              row.matchedCategoryDisplayName !== row.categoryName ? (
+                <Text style={styles.hint}>
+                  Matches existing &ldquo;{row.matchedCategoryDisplayName}&rdquo;
+                </Text>
+              ) : null}
 
               <View style={styles.fieldRow}>
-                <View style={styles.fieldUnit}>
-                  <Text style={styles.fieldLabel}>Unit</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={row.unit}
-                    onChangeText={(v) => updateRow(index, { unit: v })}
-                    placeholder="unit"
-                    placeholderTextColor={theme.colors.textPlaceholder}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
-                <View style={styles.fieldQty}>
-                  <Text style={styles.fieldLabel}>Qty</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={row.quantity == null ? '' : String(row.quantity)}
-                    onChangeText={(v) => {
-                      const trimmed = v.trim().replace(',', '.');
-                      if (trimmed === '') {
-                        updateRow(index, { quantity: null });
-                        return;
-                      }
-                      const n = Number(trimmed);
-                      updateRow(index, {
-                        quantity: Number.isFinite(n) && n >= 0 ? n : row.quantity,
-                      });
-                    }}
-                    placeholder="optional"
-                    placeholderTextColor={theme.colors.textPlaceholder}
-                    keyboardType="decimal-pad"
-                  />
-                </View>
+                <TextInput
+                  style={[styles.input, styles.unitInput]}
+                  value={row.unit}
+                  onChangeText={(v) => updateRow(index, { unit: v })}
+                  placeholder="Unit"
+                  placeholderTextColor={theme.colors.textPlaceholder}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TextInput
+                  style={[styles.input, styles.qtyInput]}
+                  value={row.quantity == null ? '' : String(row.quantity)}
+                  onChangeText={(v) => {
+                    const trimmed = v.trim().replace(',', '.');
+                    if (trimmed === '') {
+                      updateRow(index, { quantity: null });
+                      return;
+                    }
+                    const n = Number(trimmed);
+                    updateRow(index, {
+                      quantity: Number.isFinite(n) && n >= 0 ? n : row.quantity,
+                    });
+                  }}
+                  placeholder="Qty"
+                  placeholderTextColor={theme.colors.textPlaceholder}
+                  keyboardType="decimal-pad"
+                />
               </View>
 
               {hasErrors && (
@@ -267,27 +269,33 @@ export function ImportReviewSheet({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 6 },
-  summary: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
+  title: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
+  summary: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  summarySub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2, marginBottom: 4 },
 
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: theme.colors.surfaceWarm,
-    borderRadius: theme.radius.md,
-    padding: 14,
-    marginBottom: 18,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+    marginBottom: 16,
   },
   toggleLeft: { flex: 1 },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  toggleLabel: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
   toggleHint: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2, lineHeight: 16 },
 
-  list: { gap: 12, marginBottom: 14 },
+  list: { gap: 8, marginBottom: 12 },
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.lg,
-    padding: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
   },
@@ -296,7 +304,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   checkbox: {
     width: 20,
@@ -331,30 +339,50 @@ const styles = StyleSheet.create({
   badgeTextAmber: { color: '#92590A' },
   badgeTextGrey: { color: theme.colors.textMuted },
 
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-    marginBottom: 4,
-    marginTop: 4,
-    letterSpacing: 0.4,
-  },
   input: {
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.sm,
-    paddingHorizontal: 12,
-    height: 40,
-    fontSize: 14,
+    paddingHorizontal: 10,
+    height: 34,
+    fontSize: 13,
     color: theme.colors.text,
     backgroundColor: theme.colors.inputBg,
   },
-  fieldRow: { flexDirection: 'row', gap: 10 },
-  fieldGrow: { flex: 1 },
-  fieldUnit: { flex: 1 },
-  fieldQty: { width: 100 },
+  nameInput: {
+    height: 36,
+    paddingHorizontal: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.colors.text,
+    marginBottom: 6,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  categoryInput: { flex: 1 },
+  newPill: {
+    backgroundColor: theme.colors.surfaceWarm,
+    borderRadius: theme.radius.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  newPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  fieldRow: { flexDirection: 'row', gap: 8 },
+  unitInput: { flex: 1 },
+  qtyInput: { width: 80 },
 
-  hint: { fontSize: 11, color: theme.colors.textMuted, marginTop: 4 },
+  hint: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2, marginBottom: 4 },
   hintWarn: { fontSize: 11, color: '#92590A', marginTop: 6 },
   hintError: { fontSize: 11, color: theme.colors.danger, marginTop: 6 },
   errorText: { fontSize: 11, color: theme.colors.danger, marginTop: 6 },
