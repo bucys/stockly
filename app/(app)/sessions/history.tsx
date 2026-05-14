@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -22,6 +21,8 @@ import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles
 import { displayUser } from '@/lib/userDisplay';
 import { supabase } from '@/lib/supabase';
 import { theme, shadows } from '@/constants/theme';
+import { groupSessionsByMonth } from '@/lib/groupSessionsByMonth';
+import { HistoryRow } from '@/components/sessions/HistoryRow';
 
 // Future filter hooks (intentionally unused for V1).
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -39,31 +40,6 @@ interface HistoryEntry {
   counted: number;
   total: number;
   lastBy: string | null;
-}
-
-interface MonthGroup {
-  key: string;
-  label: string;
-  items: HistoryEntry[];
-}
-
-function monthKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthLabel(key: string): string {
-  const [y, m] = key.split('-').map(Number);
-  const d = new Date(y, (m ?? 1) - 1, 1);
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
-
-function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 export default function HistoryScreen() {
@@ -160,18 +136,10 @@ export default function HistoryScreen() {
     }, [load]),
   );
 
-  const groups = useMemo<MonthGroup[]>(() => {
-    const map = new Map<string, HistoryEntry[]>();
-    for (const e of entries) {
-      const key = monthKey(e.session.created_at);
-      const list = map.get(key) ?? [];
-      list.push(e);
-      map.set(key, list);
-    }
-    return Array.from(map.entries())
-      .map(([key, items]) => ({ key, label: monthLabel(key), items }))
-      .sort((a, b) => (a.key < b.key ? 1 : -1));
-  }, [entries]);
+  const groups = useMemo(
+    () => groupSessionsByMonth(entries, (e) => e.session.created_at),
+    [entries],
+  );
 
   const headerTitle = filterLocationId ? 'Location history' : 'All history';
   const isLoading = companyLoading || !accessReady || loading;
@@ -226,41 +194,22 @@ export default function HistoryScreen() {
               <Text style={styles.monthLabel}>{g.label}</Text>
               <View style={styles.group}>
                 {g.items.map((entry, idx) => (
-                  <TouchableOpacity
+                  <HistoryRow
                     key={entry.session.id}
-                    style={[
-                      styles.row,
-                      idx < g.items.length - 1 && styles.rowDivider,
-                    ]}
+                    locationName={entry.location.name}
+                    completedAt={entry.session.created_at}
+                    counted={entry.counted}
+                    total={entry.total}
+                    countedByLabel={
+                      entry.lastBy
+                        ? displayUser(entry.lastBy, profilesByUserId, currentUserId)
+                        : null
+                    }
+                    isLast={idx === g.items.length - 1}
                     onPress={() =>
                       openSession(entry.location.id, entry.location.name, entry.session.id)
                     }
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={styles.rowName} numberOfLines={1}>
-                        {entry.location.name}
-                      </Text>
-                      <Text style={styles.rowMeta} numberOfLines={1}>
-                        Completed {formatDay(entry.session.created_at)} ·{' '}
-                        {entry.counted} / {entry.total} counted
-                      </Text>
-                      {entry.lastBy ? (
-                        <Text style={styles.rowMeta} numberOfLines={1}>
-                          Last counted by{' '}
-                          {displayUser(entry.lastBy, profilesByUserId, currentUserId)}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>COMPLETE</Text>
-                    </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={15}
-                      color={theme.colors.textLight}
-                    />
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
             </View>
@@ -317,30 +266,5 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     overflow: 'hidden',
     ...shadows.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  rowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  rowName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
-  rowMeta: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  badge: {
-    backgroundColor: theme.colors.successBg,
-    borderRadius: theme.radius.xs,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.success,
-    letterSpacing: 0.5,
   },
 });

@@ -25,6 +25,8 @@ import { theme, shadows } from '@/constants/theme';
 import { relativeTime } from '@/lib/relativeTime';
 import { useAssignedLocationIds } from '@/lib/useLocationAccess';
 import { displayUser } from '@/lib/userDisplay';
+import { ActiveSessionCard } from '@/components/sessions/ActiveSessionCard';
+import { HistoryRow } from '@/components/sessions/HistoryRow';
 
 interface ActiveSessionInfo {
   session: Session;
@@ -274,7 +276,10 @@ export default function SessionsTab() {
             {activeInfos.map((info) => (
               <ActiveSessionCard
                 key={info.session.id}
-                info={info}
+                locationName={info.location.name}
+                startedAt={info.session.created_at}
+                counted={info.counted}
+                total={info.total}
                 lastByLabel={displayUser(info.lastBy, profilesByUserId, currentUserId)}
                 onContinue={() =>
                   openSession(info.location.id, info.location.name, info.session.id)
@@ -328,36 +333,16 @@ export default function SessionsTab() {
                 <Text style={styles.sectionLabel}>LATEST COMPLETED</Text>
                 <View style={styles.groupCardSecondary}>
                   {history.map((h, idx) => (
-                    <TouchableOpacity
+                    <HistoryRow
                       key={h.session.id}
-                      style={[
-                        styles.groupRow,
-                        idx < history.length - 1 && styles.groupRowBorder,
-                      ]}
+                      locationName={h.location.name}
+                      completedAt={h.session.created_at}
+                      countedByLabel={displayUser(h.lastBy, profilesByUserId, currentUserId)}
+                      isLast={idx === history.length - 1}
                       onPress={() =>
                         openSession(h.location.id, h.location.name, h.session.id)
                       }
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.groupRowLeft}>
-                        <Text style={styles.historyRowName} numberOfLines={1}>
-                          {h.location.name}
-                        </Text>
-                        <Text style={styles.historyRowMeta} numberOfLines={1}>
-                          {formatHistoryDate(h.session.created_at)} · Last counted by:{' '}
-                          {displayUser(h.lastBy, profilesByUserId, currentUserId)}
-                        </Text>
-                      </View>
-                      <View style={styles.completeBadge}>
-                        <Text style={styles.completeBadgeText}>COMPLETE</Text>
-                      </View>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={theme.colors.textLight}
-                        style={styles.historyChevron}
-                      />
-                    </TouchableOpacity>
+                    />
                   ))}
                 </View>
                 <TouchableOpacity
@@ -375,48 +360,6 @@ export default function SessionsTab() {
     </View>
   );
 }
-
-function ActiveSessionCard({
-  info,
-  lastByLabel,
-  onContinue,
-}: {
-  info: ActiveSessionInfo;
-  lastByLabel: string;
-  onContinue: () => void;
-}) {
-  const total = info.total > 0 ? info.total : 0;
-  const counted = Math.min(info.counted, total || info.counted);
-  const pct = total > 0 ? Math.round((counted / total) * 100) : 0;
-
-  return (
-    <View style={styles.activeCard}>
-      <View style={styles.activeTopRow}>
-        <Text style={styles.activeLabel}>ACTIVE SESSION</Text>
-        <Text style={styles.activeTime}>{formatDateTime(info.session.created_at)}</Text>
-      </View>
-      <Text style={styles.activeName} numberOfLines={1}>
-        {info.location.name}
-      </Text>
-      <View style={styles.activeProgressRow}>
-        <Text style={styles.activeProgressText}>
-          {counted} of {total || '–'} counted
-        </Text>
-        <Text style={styles.activePct}>{pct}%</Text>
-      </View>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${pct}%` }]} />
-      </View>
-      <Text style={styles.activeByText}>Last edited by: {lastByLabel}</Text>
-      <TouchableOpacity style={styles.continueBtn} onPress={onContinue} activeOpacity={0.85}>
-        <Text style={styles.continueBtnText}>Continue counting  →</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const ACCENT = '#2563EB';
-const ACCENT_BG = '#EEF4FF';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
@@ -437,77 +380,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textMuted,
     marginTop: 4,
-  },
-
-  // Active card
-  activeCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    borderTopWidth: 3,
-    borderTopColor: ACCENT,
-    padding: 18,
-    marginBottom: 22,
-    ...shadows.sm,
-  },
-  activeTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  activeLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: ACCENT,
-    letterSpacing: 1.1,
-  },
-  activeTime: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-  activeName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 12,
-  },
-  activeProgressRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  activeProgressText: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-  },
-  activePct: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: ACCENT_BG,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: ACCENT,
-    borderRadius: 4,
-  },
-  continueBtn: {
-    backgroundColor: ACCENT,
-    borderRadius: theme.radius.md,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  continueBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
   },
 
   // Sections
@@ -533,8 +405,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
   },
-  historyRowName: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
-  historyRowMeta: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2 },
   viewAllBtn: {
     alignSelf: 'flex-start',
     paddingHorizontal: 4,
@@ -545,12 +415,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.primary,
-  },
-  activeByText: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 2,
-    marginBottom: 8,
   },
   groupRow: {
     flexDirection: 'row',
@@ -573,21 +437,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     marginTop: 2,
   },
-  completeBadge: {
-    backgroundColor: theme.colors.successBg,
-    borderRadius: theme.radius.xs,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 6,
-  },
-  completeBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.colors.success,
-    letterSpacing: 0.8,
-  },
-  historyChevron: { marginLeft: 0 },
-
   // Empty
   emptyWrap: {
     alignItems: 'center',
