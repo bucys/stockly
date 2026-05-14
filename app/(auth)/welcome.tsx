@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Button } from '@/components/ui/Button';
@@ -38,15 +38,26 @@ export default function WelcomeScreen() {
         <View style={styles.footer}>
           <Button
             title="Get started"
-            onPress={() => router.push('/(auth)/login')}
+            onPress={() => router.push('/(auth)/register')}
             style={styles.footerBtn}
           />
-          <Button
-            title="I have a join code"
-            variant="outline"
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/login')}
+            style={styles.secondaryLink}
+          >
+            <Text style={styles.secondaryLinkText}>
+              Already have an account?{' '}
+              <Text style={styles.secondaryLinkAccent}>Log in</Text>
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={() => router.push('/(auth)/join')}
-            style={styles.footerBtnLast}
-          />
+            style={styles.tertiaryLink}
+          >
+            <Text style={styles.tertiaryLinkText}>
+              Have a join code? <Text style={styles.tertiaryLinkAccent}>Join your team</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -110,9 +121,31 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   footerBtn: {
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  footerBtnLast: {
-    marginBottom: 24,
+  secondaryLink: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryLinkText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+  },
+  secondaryLinkAccent: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  tertiaryLink: {
+    paddingVertical: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tertiaryLinkText: {
+    fontSize: 13,
+    color: theme.colors.textLight,
+  },
+  tertiaryLinkAccent: {
+    color: theme.colors.textMuted,
+    fontWeight: '600',
   },
 });

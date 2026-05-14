@@ -23,9 +23,6 @@ import {
   listCompanyMemberProfiles,
   type UserProfile,
 } from '@/services/profiles';
-import { ModalSheet } from '@/components/ui/ModalSheet';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
 import {
   listPendingAccessRequests,
   approveAccessRequest,
@@ -33,6 +30,12 @@ import {
   type AccessRequest,
 } from '@/services/accessRequests';
 import { RequestAccessSheet } from '@/components/access/RequestAccessSheet';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import { ProfileRow } from '@/components/profile/ProfileRow';
+import { AccessRequestRow } from '@/components/profile/AccessRequestRow';
+import { MyAccessSection } from '@/components/profile/MyAccessSection';
+import { DisplayNameSheet } from '@/components/profile/DisplayNameSheet';
+import { profileStyles } from '@/components/profile/styles';
 import { supabase } from '@/lib/supabase';
 import { theme } from '@/constants/theme';
 
@@ -219,58 +222,30 @@ export default function ProfileTab() {
     );
   }
 
-  const initial = (myDisplayName?.trim()?.[0] ?? myEmail?.trim()?.[0] ?? '?').toUpperCase();
-
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Profile header */}
-      <View style={styles.profileHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </View>
-        <Text style={styles.profileName} numberOfLines={1}>
-          {myDisplayName?.trim() || myEmail || 'Your account'}
-        </Text>
-        {myEmail && myEmail !== myDisplayName ? (
-          <Text style={styles.profileEmail} numberOfLines={1}>{myEmail}</Text>
-        ) : null}
-        <View style={styles.rolePill}>
-          <View style={[styles.roleDot, role === 'admin' && styles.roleDotAdmin]} />
-          <Text style={styles.rolePillText}>{role === 'admin' ? 'Admin' : 'Employee'}</Text>
-        </View>
-      </View>
+      <ProfileHeader displayName={myDisplayName} email={myEmail} role={role} />
 
-      {/* Profile — display name row */}
-      <Text style={styles.sectionTitle}>Profile</Text>
-      <View style={styles.group}>
-        <TouchableOpacity
-          style={styles.row}
+      <Text style={profileStyles.sectionTitle}>Profile</Text>
+      <View style={profileStyles.group}>
+        <ProfileRow
+          label="Display name"
+          value={myDisplayName ?? 'Not set'}
+          valueIsEmpty={!myDisplayName}
           onPress={openNameEditor}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.rowLabel}>Display name</Text>
-          <View style={styles.rowRight}>
-            <Text
-              style={[styles.rowValue, !myDisplayName && styles.rowValueEmpty]}
-              numberOfLines={1}
-            >
-              {myDisplayName ?? 'Not set'}
-            </Text>
-            <Ionicons name="chevron-forward" size={15} color={theme.colors.textLight} />
-          </View>
-        </TouchableOpacity>
+          showChevron={false}
+        />
       </View>
 
-      {/* Admin: team join code */}
       {role === 'admin' && (
         <>
-          <Text style={styles.sectionTitle}>Team join code</Text>
-          <View style={styles.group}>
-            <View style={styles.row}>
+          <Text style={profileStyles.sectionTitle}>Team join code</Text>
+          <View style={profileStyles.group}>
+            <View style={profileStyles.row}>
               {joinCode ? (
                 <>
                   <Text style={styles.codeInline}>{joinCode}</Text>
@@ -299,178 +274,63 @@ export default function ProfileTab() {
               )}
             </View>
           </View>
-          <Text style={styles.helperText}>
+          <Text style={profileStyles.helperText}>
             Share with team members so they can join.
           </Text>
         </>
       )}
 
-      {/* Admin: access requests */}
       {role === 'admin' && pendingRequests.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>Access requests</Text>
-          <View style={styles.group}>
-            {pendingRequests.map((req, idx) => {
-              const deciding = requestDeciding === req.id;
-              return (
-                <View
-                  key={req.id}
-                  style={[
-                    styles.requestItem,
-                    idx < pendingRequests.length - 1 && styles.rowDivider,
-                  ]}
-                >
-                  <View style={{ flex: 1, paddingRight: 8 }}>
-                    <Text style={styles.requestName} numberOfLines={1}>
-                      {displayFor(req.user_id)}
-                    </Text>
-                    <Text style={styles.requestMeta} numberOfLines={1}>
-                      {locationName(req.location_id)}
-                    </Text>
-                    {req.reason ? (
-                      <Text style={styles.requestReason} numberOfLines={2}>
-                        “{req.reason}”
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.requestActions}>
-                    <TouchableOpacity
-                      style={styles.rejectBtn}
-                      onPress={() => decideRequest(req, 'reject')}
-                      disabled={deciding}
-                      activeOpacity={0.7}
-                      hitSlop={6}
-                    >
-                      <Text style={styles.rejectBtnText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.approveBtn}
-                      onPress={() => decideRequest(req, 'approve')}
-                      disabled={deciding}
-                      activeOpacity={0.85}
-                      hitSlop={6}
-                    >
-                      {deciding ? (
-                        <ActivityIndicator color="#fff" size="small" />
-                      ) : (
-                        <Text style={styles.approveBtnText}>Approve</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
+          <Text style={profileStyles.sectionTitle}>Access requests</Text>
+          <View style={profileStyles.group}>
+            {pendingRequests.map((req, idx) => (
+              <AccessRequestRow
+                key={req.id}
+                employeeName={displayFor(req.user_id)}
+                locationName={locationName(req.location_id)}
+                reason={req.reason}
+                deciding={requestDeciding === req.id}
+                isLast={idx === pendingRequests.length - 1}
+                onApprove={() => decideRequest(req, 'approve')}
+                onReject={() => decideRequest(req, 'reject')}
+              />
+            ))}
           </View>
         </>
       )}
 
-      {/* Admin: team navigation */}
       {role === 'admin' && (
         <>
-          <Text style={styles.sectionTitle}>Team</Text>
-          <View style={styles.group}>
-            <TouchableOpacity
-              style={styles.row}
+          <Text style={profileStyles.sectionTitle}>Team</Text>
+          <View style={profileStyles.group}>
+            <ProfileRow
+              label="Employees"
+              sub={
+                employeeCount != null
+                  ? `${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'}`
+                  : 'Manage location access'
+              }
               onPress={() => router.push('/employees')}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowLabel}>Employees</Text>
-                <Text style={styles.rowSub}>
-                  {employeeCount != null
-                    ? `${employeeCount} ${employeeCount === 1 ? 'employee' : 'employees'}`
-                    : 'Manage location access'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={15} color={theme.colors.textLight} />
-            </TouchableOpacity>
+            />
           </View>
         </>
       )}
 
-      {/* Employee: my access */}
-      {role !== 'admin' && (() => {
-        const MAX_VISIBLE = 3;
-        const assignedLocations =
-          assignedIds == null
-            ? locations
-            : locations.filter((l) => assignedIds.has(l.id));
-        const visible = assignedLocations.slice(0, MAX_VISIBLE);
-        const remaining = assignedLocations.length - visible.length;
-        const isLoading = assignedLoading && assignedLocations.length === 0;
-        const hasAccess = !isLoading && assignedLocations.length > 0;
-        return (
-          <>
-            <Text style={styles.sectionTitle}>My access</Text>
-            <View style={styles.group}>
-              {isLoading ? (
-                <View style={styles.row}>
-                  <ActivityIndicator color={theme.colors.primary} />
-                </View>
-              ) : hasAccess ? (
-                <>
-                  {visible.map((loc, idx) => (
-                    <View
-                      key={loc.id}
-                      style={[
-                        styles.row,
-                        (idx < visible.length - 1 || remaining > 0) && styles.rowDivider,
-                      ]}
-                    >
-                      <Text style={styles.rowLabel} numberOfLines={1}>
-                        {loc.name}
-                      </Text>
-                    </View>
-                  ))}
-                  {remaining > 0 && (
-                    <View style={[styles.row, styles.rowDivider]}>
-                      <Text style={styles.rowSubInline}>+{remaining} more</Text>
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    style={styles.row}
-                    onPress={() => setShowRequestSheet(true)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: theme.colors.primary }]}>
-                        Request access
-                      </Text>
-                      <Text style={styles.rowSub}>Ask an admin for another location</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={15} color={theme.colors.textLight} />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <View style={[styles.row, styles.rowDivider]}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.rowLabel}>No locations assigned</Text>
-                      <Text style={styles.rowSub}>Ask your admin for access</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.row}
-                    onPress={() => setShowRequestSheet(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.rowLabel, { color: theme.colors.primary }]}>
-                      Request access
-                    </Text>
-                    <Ionicons name="chevron-forward" size={15} color={theme.colors.textLight} />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </>
-        );
-      })()}
+      {role !== 'admin' && (
+        <MyAccessSection
+          assignedIds={assignedIds}
+          assignedLoading={assignedLoading}
+          locations={locations}
+          onRequestAccess={() => setShowRequestSheet(true)}
+        />
+      )}
 
       {/* Sign out — visually separated danger zone */}
       <View style={styles.dangerDivider} />
-      <View style={[styles.group, styles.dangerGroup]}>
+      <View style={[profileStyles.group, styles.dangerGroup]}>
         <TouchableOpacity
-          style={styles.row}
+          style={profileStyles.row}
           onPress={handleSignOut}
           disabled={signingOut}
           activeOpacity={0.7}
@@ -481,31 +341,14 @@ export default function ProfileTab() {
         </TouchableOpacity>
       </View>
 
-      <ModalSheet
+      <DisplayNameSheet
         visible={showNameEditor}
-        onClose={() => !savingName && setShowNameEditor(false)}
-        avoidKeyboard
-        maxHeight="60%"
-      >
-        <Text style={styles.editorTitle}>Edit display name</Text>
-        <Text style={styles.editorSub}>
-          Leave empty to clear — your email will be shown instead.
-        </Text>
-        <Input
-          placeholder="Display name"
-          value={nameDraft}
-          onChangeText={setNameDraft}
-          autoFocus
-          returnKeyType="done"
-          onSubmitEditing={saveDisplayName}
-        />
-        <Button title="Save" onPress={saveDisplayName} loading={savingName} />
-        <Button
-          title="Cancel"
-          onPress={() => setShowNameEditor(false)}
-          variant="ghost"
-        />
-      </ModalSheet>
+        draft={nameDraft}
+        saving={savingName}
+        onChangeDraft={setNameDraft}
+        onSave={saveDisplayName}
+        onClose={() => setShowNameEditor(false)}
+      />
 
       <RequestAccessSheet
         visible={showRequestSheet}
@@ -521,127 +364,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: theme.spacing.lg, paddingTop: 12, paddingBottom: 40 },
 
-  // Header
-  profileHeader: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.surfaceWarm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarText: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-    maxWidth: '100%',
-  },
-  profileEmail: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-    marginTop: 2,
-  },
-  rolePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  roleDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: theme.colors.textLight,
-  },
-  roleDotAdmin: { backgroundColor: theme.colors.primary },
-  rolePillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-  },
-
-  // Sections
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-    marginTop: 18,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  group: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  helperText: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginTop: 6,
-    paddingHorizontal: 4,
-  },
-
-  // Generic row
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  rowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  rowLabel: {
-    fontSize: 15,
-    color: theme.colors.text,
-    flex: 1,
-  },
-  rowSub: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 2,
-  },
-  rowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    maxWidth: '60%',
-  },
-  rowValue: {
-    fontSize: 14,
-    color: theme.colors.textMuted,
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  rowValueEmpty: { color: theme.colors.textLight },
-  rowSubInline: {
-    fontSize: 13,
-    color: theme.colors.textMuted,
-    flex: 1,
-  },
-
-  // Inline join code
+  // Inline join code (rendered inline inside the admin join-code group)
   codeInline: {
     flex: 1,
     fontSize: 15,
@@ -662,43 +385,7 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
 
-  // Access requests
-  requestItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  requestName: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
-  requestMeta: { fontSize: 12, color: theme.colors.textMuted, marginTop: 1 },
-  requestReason: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  requestActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rejectBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.radius.md,
-  },
-  rejectBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.colors.danger,
-  },
-  approveBtn: {
-    backgroundColor: theme.colors.success,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: theme.radius.md,
-    minWidth: 76,
-    alignItems: 'center',
-  },
-  approveBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-
-  // Sign out — danger zone
+  // Sign out — danger zone (kept inline to preserve negative-margin divider)
   dangerDivider: {
     height: 1,
     backgroundColor: theme.colors.borderLight,
@@ -718,8 +405,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   signOutTextDisabled: { color: theme.colors.textLight },
-
-  // Editor modal
-  editorTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 6 },
-  editorSub: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
 });

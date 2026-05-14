@@ -90,8 +90,8 @@ export default function LoginScreen() {
               onPress={() => router.push('/(auth)/register')}
             >
               <Text style={styles.secondaryLinkText}>
-                No account?{' '}
-                <Text style={styles.secondaryLinkBold}>Create company</Text>
+                Don&apos;t have an account?{' '}
+                <Text style={styles.secondaryLinkBold}>Get started</Text>
               </Text>
             </TouchableOpacity>
           </View>
