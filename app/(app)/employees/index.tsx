@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Alert,
   ScrollView,
@@ -18,9 +17,10 @@ import {
   unassignEmployeeFromLocation,
   type EmployeeWithAssignments,
 } from '@/services/assignments';
-import { ModalSheet } from '@/components/ui/ModalSheet';
 import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles';
 import { theme, shadows } from '@/constants/theme';
+import { EmployeeRow } from '@/components/employees/EmployeeRow';
+import { EmployeeAccessSheet } from '@/components/employees/EmployeeAccessSheet';
 
 export default function EmployeesScreen() {
   const { companyId, role, loading } = useCompanyId();
@@ -157,6 +157,14 @@ export default function EmployeesScreen() {
     }
   }
 
+  const hasChanges = useMemo(() => {
+    if (!editingEmployee) return false;
+    const { added, removed } = diffFor(editingEmployee);
+    return added.length + removed.length > 0;
+    // diffFor closes over selectedIds, so recompute when either changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingEmployee, selectedIds]);
+
   function handleSave() {
     if (!editingEmployee) return;
     const { removed } = diffFor(editingEmployee);
@@ -215,96 +223,28 @@ export default function EmployeesScreen() {
           employees.map((emp) => {
             const { title, subtitle } = nameFor(emp.user_id);
             return (
-              <TouchableOpacity
+              <EmployeeRow
                 key={emp.user_id}
-                style={styles.employeeRow}
+                title={title}
+                subtitle={subtitle}
+                assignedSummary={assignmentLabel(emp)}
                 onPress={() => openEditor(emp)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.employeeRowLeft}>
-                  <Text style={styles.employeeName}>{title}</Text>
-                  {subtitle ? (
-                    <Text style={styles.employeeEmail}>{subtitle}</Text>
-                  ) : null}
-                  <Text style={styles.employeeMeta}>{assignmentLabel(emp)}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
-              </TouchableOpacity>
+              />
             );
           })
         )}
 
-        <ModalSheet
+        <EmployeeAccessSheet
           visible={editingEmployee != null}
-          onClose={closeEditor}
-          scrollable
-          maxHeight="85%"
-        >
-          {editingEmployee && (
-            <>
-              <Text style={styles.sheetTitle}>Location access</Text>
-              <Text style={styles.sheetSub}>{displayFor(editingEmployee.user_id)}</Text>
-              {locations.length === 0 ? (
-                <Text style={styles.sheetEmpty}>No locations in this company yet.</Text>
-              ) : (
-                locations.map((loc) => {
-                  const checked = selectedIds.has(loc.id);
-                  return (
-                    <TouchableOpacity
-                      key={loc.id}
-                      style={styles.locRow}
-                      onPress={() => toggleSelected(loc.id)}
-                      activeOpacity={0.7}
-                      disabled={saving}
-                    >
-                      <View style={styles.locRowLeft}>
-                        <Text style={styles.locName}>{loc.name}</Text>
-                        {loc.address ? (
-                          <Text style={styles.locAddress}>{loc.address}</Text>
-                        ) : null}
-                      </View>
-                      <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-                        {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-              {(() => {
-                const { added, removed } = diffFor(editingEmployee);
-                const dirty = added.length + removed.length > 0;
-                return (
-                  <View style={styles.footer}>
-                    <TouchableOpacity
-                      style={[styles.footerBtn, styles.footerCancel]}
-                      onPress={closeEditor}
-                      disabled={saving}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.footerCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.footerBtn,
-                        styles.footerSave,
-                        (!dirty || saving) && styles.footerSaveDisabled,
-                      ]}
-                      onPress={handleSave}
-                      disabled={!dirty || saving}
-                      activeOpacity={0.7}
-                    >
-                      {saving ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.footerSaveText}>Save changes</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                );
-              })()}
-            </>
-          )}
-        </ModalSheet>
+          employeeLabel={editingEmployee ? displayFor(editingEmployee.user_id) : ''}
+          locations={locations}
+          selectedIds={selectedIds}
+          saving={saving}
+          hasChanges={hasChanges}
+          onToggleLocation={toggleSelected}
+          onCancel={closeEditor}
+          onSave={handleSave}
+        />
       </ScrollView>
     </>
   );
@@ -348,78 +288,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  employeeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 8,
-    ...shadows.sm,
-  },
-  employeeRowLeft: { flex: 1 },
-  employeeName: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
-  employeeEmail: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginTop: 2,
-  },
-  employeeMeta: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginTop: 4,
-  },
-
-  sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
-  sheetSub: { fontSize: 13, color: theme.colors.textMuted, marginBottom: 16 },
-  sheetEmpty: { fontSize: 13, color: theme.colors.textMuted, paddingVertical: 12 },
-  locRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  locRowLeft: { flex: 1 },
-  locName: { fontSize: 15, fontWeight: '500', color: theme.colors.text },
-  locAddress: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-
-  footer: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderLight,
-  },
-  footerBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: theme.radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerCancel: {
-    backgroundColor: theme.colors.background,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  footerCancelText: { color: theme.colors.text, fontSize: 15, fontWeight: '600' },
-  footerSave: { backgroundColor: theme.colors.primary },
-  footerSaveDisabled: { opacity: 0.4 },
-  footerSaveText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
