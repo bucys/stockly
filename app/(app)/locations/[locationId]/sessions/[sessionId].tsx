@@ -294,7 +294,10 @@ export default function CountingScreen() {
   function openProduct(product: ProductWithCount) {
     if (sessionStatus === 'completed') return;
     setSelected(product);
-    setInputValue(product.count !== null ? String(product.count.quantity) : '');
+    // Always open with an empty numpad — counted products still show their
+    // current value in the "Already counted" header card. Prefilling caused
+    // accidental overwrites during collaborative counting.
+    setInputValue('');
   }
 
   function handleNumpadKey(key: string) {
@@ -335,13 +338,22 @@ export default function CountingScreen() {
     return null;
   }
 
-  async function handleSave(advance: boolean = false) {
+  type SaveMode = 'replace' | 'add';
+
+  async function handleSave(
+    advance: boolean = false,
+    mode: SaveMode = 'replace',
+  ) {
     if (!selected || !sessionId || !userId) return;
-    const qty = parseFloat(inputValue);
-    if (isNaN(qty) || qty < 0) {
+    const input = parseFloat(inputValue);
+    if (isNaN(input) || input < 0) {
       Alert.alert('Invalid quantity', 'Please enter a valid number.');
       return;
     }
+
+    const existing =
+      mode === 'add' && selected.count != null ? Number(selected.count.quantity) : 0;
+    const qty = mode === 'add' ? existing + input : input;
 
     setSaving(true);
     try {
@@ -367,11 +379,17 @@ export default function CountingScreen() {
       }));
       setSections(updatedSections);
 
-      if (advance) {
+      if (mode === 'add') {
+        // Add behaves like a one-shot correction: persist the sum and close,
+        // matching the Replace flow's shape.
+        closeModal();
+      } else if (advance) {
         const next = findNextProduct(selected.id, updatedSections);
         if (next) {
           setSelected(next);
-          setInputValue(next.count !== null ? String(next.count.quantity) : '');
+          // Same rule as openProduct: never prefill — header card shows the
+          // existing count for already-counted products.
+          setInputValue('');
         } else {
           closeModal();
           Alert.alert('Reached end of session', 'No more products to count.');
@@ -753,18 +771,28 @@ export default function CountingScreen() {
       >
         <Text style={styles.sheetProductName}>{selected?.name}</Text>
 
-        {selected?.count !== null && selected?.count !== undefined && (
-          <View style={styles.existingRow}>
-            <Text style={styles.existingValue}>
-              Current: {selected.count.quantity} {selected?.unit}
-            </Text>
-            <Text style={styles.existingMeta}>
-              {selected.count.updated_by === userId ? 'You' : 'Team member'}
-              {' · '}
-              {formatTime(selected.count.updated_at)}
-            </Text>
-          </View>
-        )}
+        {selected?.count !== null && selected?.count !== undefined && (() => {
+          const updatedBy = selected.count.updated_by;
+          const byProfile = updatedBy ? profilesByUserId.get(updatedBy) : null;
+          const byLabel =
+            updatedBy === userId
+              ? 'You'
+              : byProfile?.display_name?.trim() ||
+                byProfile?.email?.trim() ||
+                'Team member';
+          return (
+            <View style={styles.existingRow}>
+              <Text style={styles.existingValue}>
+                Already counted: {selected.count.quantity} {selected?.unit}
+              </Text>
+              <Text style={styles.existingMeta}>
+                Last edited by: {byLabel}
+                {' · '}
+                {formatTime(selected.count.updated_at)}
+              </Text>
+            </View>
+          );
+        })()}
 
         <View style={styles.numpadDisplay}>
           <Text
@@ -781,39 +809,81 @@ export default function CountingScreen() {
 
         <Numpad onKey={handleNumpadKey} disabled={saving} />
 
-        <View style={styles.saveRow}>
-          <TouchableOpacity
-            style={[
-              styles.saveSecondaryBtn,
-              (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
-            ]}
-            onPress={() => handleSave(false)}
-            disabled={!isValidQty(inputValue) || saving}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveSecondaryText}>Save</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.numpadSaveBtn,
-              styles.savePrimaryBtn,
-              (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
-            ]}
-            onPress={() => handleSave(true)}
-            disabled={!isValidQty(inputValue) || saving}
-            activeOpacity={0.85}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.numpadSaveBtnText}>
+        {selected?.count == null ? (
+          <View style={styles.saveRow}>
+            <TouchableOpacity
+              style={[
+                styles.saveSecondaryBtn,
+                (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+              ]}
+              onPress={() => handleSave(false)}
+              disabled={!isValidQty(inputValue) || saving}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveSecondaryText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.numpadSaveBtn,
+                styles.savePrimaryBtn,
+                (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+              ]}
+              onPress={() => handleSave(true)}
+              disabled={!isValidQty(inputValue) || saving}
+              activeOpacity={0.85}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.numpadSaveBtnText}>
+                  {isValidQty(inputValue)
+                    ? `Save & Next — ${inputValue} ${selected?.unit ?? ''}`.trim()
+                    : 'Save & Next'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.saveRow}>
+            <TouchableOpacity
+              style={[
+                styles.saveSecondaryBtn,
+                (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+              ]}
+              onPress={() => handleSave(false, 'add')}
+              disabled={!isValidQty(inputValue) || saving}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveSecondaryText}>
                 {isValidQty(inputValue)
-                  ? `Save & Next — ${inputValue} ${selected?.unit ?? ''}`.trim()
-                  : 'Save & Next'}
+                  ? `Add (= ${
+                      Number(selected.count.quantity) + parseFloat(inputValue)
+                    } ${selected?.unit ?? ''})`.trim()
+                  : 'Add'}
               </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.numpadSaveBtn,
+                styles.savePrimaryBtn,
+                (!isValidQty(inputValue) || saving) && styles.numpadSaveBtnDisabled,
+              ]}
+              onPress={() => handleSave(false, 'replace')}
+              disabled={!isValidQty(inputValue) || saving}
+              activeOpacity={0.85}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.numpadSaveBtnText}>
+                  {isValidQty(inputValue)
+                    ? `Replace — ${inputValue} ${selected?.unit ?? ''}`.trim()
+                    : 'Replace'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ModalSheet>
     </View>
   );
