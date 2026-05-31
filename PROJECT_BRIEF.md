@@ -1,4 +1,4 @@
-# Inventory Tracker — Project Brief
+# Stockly — Project Brief
 
 ## Product
 Mobile-first inventory counting app replacing paper stocktaking.
