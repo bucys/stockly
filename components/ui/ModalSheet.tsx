@@ -28,6 +28,13 @@ interface ModalSheetProps {
    * persistent overlays (FAB, tab bar, etc.).
    */
   contentBottomPadding?: number;
+  /**
+   * Make the sheet fill its `maxHeight` and let the children own the internal
+   * layout (e.g. a fixed header, a flexible scroll area, and a sticky footer).
+   * The children are rendered in a `flex: 1` column instead of the default
+   * single ScrollView. Ignored when `scrollable` is true.
+   */
+  fillHeight?: boolean;
 }
 
 export function ModalSheet({
@@ -40,36 +47,50 @@ export function ModalSheet({
   sheetStyle,
   keyboardVerticalOffset = 0,
   contentBottomPadding = 24,
+  fillHeight = false,
 }: ModalSheetProps) {
   function handleClose() {
     Keyboard.dismiss();
     onClose();
   }
 
-  const sheetContent = scrollable ? (
-    <ScrollView
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomPadding }]}
-      keyboardDismissMode="interactive"
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      // The outer KeyboardAvoidingView already lifts the sheet above the
-      // keyboard. Adding automaticallyAdjustKeyboardInsets on top stacks a
-      // second keyboard-sized inset and creates a scrollable blank area
-      // under short forms.
-      automaticallyAdjustKeyboardInsets={false}
-      bounces={false}
-    >
-      {children}
-    </ScrollView>
-  ) : (
-    <View style={[styles.sheetContent, { paddingBottom: contentBottomPadding }]}>
-      {children}
-    </View>
-  );
+  let sheetContent;
+  if (scrollable) {
+    sheetContent = (
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomPadding }]}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        // The outer KeyboardAvoidingView already lifts the sheet above the
+        // keyboard. Adding automaticallyAdjustKeyboardInsets on top stacks a
+        // second keyboard-sized inset and creates a scrollable blank area
+        // under short forms.
+        automaticallyAdjustKeyboardInsets={false}
+        bounces={false}
+      >
+        {children}
+      </ScrollView>
+    );
+  } else if (fillHeight) {
+    // Children own the internal layout (header / scroll / sticky footer).
+    sheetContent = <View style={styles.sheetContentFill}>{children}</View>;
+  } else {
+    sheetContent = (
+      <View style={[styles.sheetContent, { paddingBottom: contentBottomPadding }]}>
+        {children}
+      </View>
+    );
+  }
 
   const sheet = (
     <Pressable
-      style={[styles.sheetBase, maxHeight ? { maxHeight } : undefined, sheetStyle]}
+      style={[
+        styles.sheetBase,
+        maxHeight ? { maxHeight } : undefined,
+        fillHeight ? styles.sheetFill : undefined,
+        sheetStyle,
+      ]}
       onPress={() => {}}
     >
       <View style={styles.handle} />
@@ -114,6 +135,18 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: theme.radius.xxl,
     borderTopRightRadius: theme.radius.xxl,
     paddingTop: 12,
+  },
+  // Combined with `maxHeight`, flexGrow turns the sheet into a concrete-height
+  // box so a `flex: 1` child (e.g. a scroll area) can be bounded and a footer
+  // can stay pinned below it.
+  sheetFill: {
+    flexGrow: 1,
+    overflow: 'hidden',
+  },
+  sheetContentFill: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: 2,
   },
   handle: {
     width: 40,

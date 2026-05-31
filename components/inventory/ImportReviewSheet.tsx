@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { Button } from '@/components/ui/Button';
 import { theme } from '@/constants/theme';
@@ -40,6 +41,7 @@ export function ImportReviewSheet({
 }: ImportReviewSheetProps) {
   const [drafts, setDrafts] = useState<DraftState[]>([]);
   const [applyQuantities, setApplyQuantities] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!visible) return;
@@ -87,18 +89,28 @@ export function ImportReviewSheet({
   }
 
   return (
-    <ModalSheet visible={visible} onClose={onClose} scrollable maxHeight="95%">
-      <Text style={styles.title}>Review import</Text>
-      <Text style={styles.summary}>
-        {summary.included} {summary.included === 1 ? 'product' : 'products'} ready to import
-      </Text>
-      {summary.excluded > 0 && (
-        <Text style={styles.summarySub}>{summary.excluded} skipped</Text>
-      )}
+    <ModalSheet visible={visible} onClose={onClose} fillHeight maxHeight="95%">
+      {/* Fixed header / summary */}
+      <View style={styles.header}>
+        <Text style={styles.title}>Review import</Text>
+        <Text style={styles.summary}>
+          {summary.included} {summary.included === 1 ? 'product' : 'products'} ready to import
+        </Text>
+        {summary.excluded > 0 && (
+          <Text style={styles.summarySub}>{summary.excluded} skipped</Text>
+        )}
 
-      <ImportQuantityToggle enabled={applyQuantities} onToggle={setApplyQuantities} />
+        <ImportQuantityToggle enabled={applyQuantities} onToggle={setApplyQuantities} />
+      </View>
 
-      <View style={styles.list}>
+      {/* Independently scrollable product review area */}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {drafts.map((row, index) => {
           const hasErrors = row.errors.length > 0;
           const isIncluded = !row.excluded && !hasErrors;
@@ -113,21 +125,32 @@ export function ImportReviewSheet({
             />
           );
         })}
-      </View>
+      </ScrollView>
 
-      <Button
-        title={`Continue (${summary.included})`}
-        onPress={handleConfirm}
-        disabled={summary.included === 0}
-      />
-      <Button title="Cancel" onPress={onClose} variant="ghost" />
+      {/* Sticky action footer */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 4 }]}>
+        <Button
+          title={`Continue (${summary.included})`}
+          onPress={handleConfirm}
+          disabled={summary.included === 0}
+        />
+        <Button title="Cancel" onPress={onClose} variant="ghost" />
+      </View>
     </ModalSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  header: { paddingBottom: 4 },
   title: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
   summary: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
   summarySub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2, marginBottom: 4 },
-  list: { gap: 8, marginBottom: 12 },
+  scroll: { flex: 1 },
+  scrollContent: { gap: 8, paddingTop: 4, paddingBottom: 12 },
+  footer: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
+  },
 });
