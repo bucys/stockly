@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -31,9 +30,6 @@ import {
   ImportMode,
   SourceLocation,
 } from '@/services/import';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { ModalSheet } from '@/components/ui/ModalSheet';
 import { theme, shadows } from '@/constants/theme';
 import { normalizeCategoryName } from '@/lib/normalizeCategoryName';
 import { normalizeProductName } from '@/lib/normalizeProductName';
@@ -43,6 +39,13 @@ import { parseImportXlsx } from '@/lib/parseImportXlsx';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { ImportReviewSheet } from '@/components/inventory/ImportReviewSheet';
+import { CategorySection } from '@/components/inventory/CategorySection';
+import { RenameCategorySheet } from '@/components/inventory/RenameCategorySheet';
+import { ProductEditorSheet } from '@/components/inventory/ProductEditorSheet';
+import { ImportOptionsSheet } from '@/components/inventory/ImportOptionsSheet';
+import { ImportFileSheet } from '@/components/inventory/ImportFileSheet';
+import { PasteImportSheet } from '@/components/inventory/PasteImportSheet';
+import { CopyFromLocationSheet } from '@/components/inventory/CopyFromLocationSheet';
 import { commitImportPlan } from '@/services/importProducts';
 import type { ImportPlan } from '@/lib/importMatchers';
 
@@ -718,55 +721,17 @@ export default function LocationDetailScreen() {
                 <Text style={styles.noResultsSub}>Try a different search term.</Text>
               </View>
             )}
-            {filteredCategories.map((cat) => {
-              const collapsed = !searchActive && collapsedCatIds.has(cat.id);
-              return (
-              <View key={cat.id} style={styles.section}>
-                <TouchableOpacity
-                  style={styles.categoryRow}
-                  onPress={() => toggleCategory(cat.id)}
-                  onLongPress={role === 'admin' ? () => handleCategoryActions(cat) : undefined}
-                  delayLongPress={400}
-                  activeOpacity={0.6}
-                >
-                  <Text style={styles.categoryName}>{cat.name.toUpperCase()}</Text>
-                  <Text style={styles.categoryCount}>
-                    {cat.products.length} {cat.products.length === 1 ? 'product' : 'products'}
-                  </Text>
-                  <Ionicons
-                    name={collapsed ? 'chevron-forward' : 'chevron-down'}
-                    size={14}
-                    color={theme.colors.textLight}
-                    style={styles.categoryChevron}
-                  />
-                </TouchableOpacity>
-
-                {!collapsed && cat.products.map((product) => (
-                  <TouchableOpacity
-                    key={product.id}
-                    style={styles.productRow}
-                    onPress={() => handleProductPress(product, cat.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.productLeft}>
-                      <Text style={styles.productName} numberOfLines={1}>
-                        {product.name}
-                      </Text>
-                      <Text style={styles.productUnit}>{product.unit}</Text>
-                    </View>
-                    {product.last_known_quantity != null ? (
-                      <Text style={styles.productQty}>
-                        {product.last_known_quantity}
-                        <Text style={styles.productQtyUnit}> {product.unit}</Text>
-                      </Text>
-                    ) : (
-                      <Text style={styles.productQtyEmpty}>—</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-              );
-            })}
+            {filteredCategories.map((cat) => (
+              <CategorySection
+                key={cat.id}
+                category={cat}
+                collapsed={!searchActive && collapsedCatIds.has(cat.id)}
+                isAdmin={role === 'admin'}
+                onToggle={toggleCategory}
+                onLongPress={handleCategoryActions}
+                onProductPress={handleProductPress}
+              />
+            ))}
 
           </ScrollView>
         </>
@@ -796,353 +761,97 @@ export default function LocationDetailScreen() {
         </>
       )}
 
-      {/* ── Category rename modal (admin housekeeping) ─────────────────────── */}
-      <ModalSheet
+      {/* ── Category rename sheet (admin housekeeping) ─────────────────────── */}
+      <RenameCategorySheet
         visible={showCatModal}
+        value={catName}
+        saving={catSaving}
+        onChangeText={setCatName}
+        onSave={handleSaveCategory}
         onClose={() => setShowCatModal(false)}
-        scrollable
-        maxHeight="90%"
-      >
-        <Text style={styles.sheetTitle}>Rename category</Text>
-        <Input
-          placeholder="Category name"
-          value={catName}
-          onChangeText={setCatName}
-          autoFocus
-          returnKeyType="done"
-          onSubmitEditing={handleSaveCategory}
-        />
-        <Button
-          title="Save"
-          onPress={handleSaveCategory}
-          loading={catSaving}
-          disabled={!catName.trim()}
-        />
-        <Button title="Cancel" onPress={() => setShowCatModal(false)} variant="ghost" />
-      </ModalSheet>
+      />
 
-      {/* ── Product modal ──────────────────────────────────────────────────── */}
-      <ModalSheet
+      {/* ── Product editor sheet ───────────────────────────────────────────── */}
+      <ProductEditorSheet
         visible={showProductModal}
+        isEditing={editingProduct !== null}
+        name={productName}
+        onChangeName={setProductName}
+        categoryText={productCategoryText}
+        onChangeCategoryText={setProductCategoryText}
+        categorySuggestions={categorySuggestions}
+        onSelectSuggestion={setProductCategoryText}
+        showCreateHint={
+          productCategoryText.trim() !== '' &&
+          !categories.some(
+            (c) => normalizeCategoryName(c.name) === normalizeCategoryName(productCategoryText),
+          )
+        }
+        createHintName={productCategoryText.trim()}
+        units={UNITS}
+        unit={productUnit}
+        onSelectUnit={setProductUnit}
+        lastQty={productLastQty}
+        onChangeLastQty={setProductLastQty}
+        saving={productSaving}
+        onSave={handleSaveProduct}
         onClose={() => setShowProductModal(false)}
-        scrollable
-        maxHeight="90%"
-      >
-        <Text style={styles.sheetTitle}>
-          {editingProduct ? 'Edit product' : 'New product'}
-        </Text>
+      />
 
-        <Text style={styles.fieldLabel}>Name</Text>
-        <Input
-          placeholder="Product name"
-          value={productName}
-          onChangeText={setProductName}
-          autoFocus
-        />
-
-        <Text style={styles.fieldLabel}>Category</Text>
-        <TextInput
-          style={styles.categoryInput}
-          placeholder="Type to find or create…"
-          placeholderTextColor={theme.colors.textPlaceholder}
-          value={productCategoryText}
-          onChangeText={setProductCategoryText}
-          autoCorrect={false}
-          autoCapitalize="words"
-          returnKeyType="done"
-        />
-        {categorySuggestions.length > 0 && (
-          <View style={styles.suggestionsWrap}>
-            {categorySuggestions.map((s) => (
-              <TouchableOpacity
-                key={s}
-                style={styles.suggestionChip}
-                onPress={() => setProductCategoryText(s)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.suggestionChipText}>{s}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-        {productCategoryText.trim() !== '' &&
-          !categories.some((c) => normalizeCategoryName(c.name) === normalizeCategoryName(productCategoryText)) && (
-            <Text style={styles.suggestionHint}>
-              Will create new category "{productCategoryText.trim()}"
-            </Text>
-          )}
-
-        <Text style={styles.fieldLabel}>Unit</Text>
-        <View style={styles.chipsWrap}>
-          {UNITS.map((unit) => (
-            <TouchableOpacity
-              key={unit}
-              style={[styles.chip, productUnit === unit && styles.chipSelected]}
-              onPress={() => setProductUnit(unit)}
-            >
-              <Text style={[styles.chipText, productUnit === unit && styles.chipTextSelected]}>
-                {unit}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.fieldLabel}>Last known quantity (optional)</Text>
-        <Input
-          placeholder="e.g. 50"
-          value={productLastQty}
-          onChangeText={setProductLastQty}
-          keyboardType="decimal-pad"
-        />
-
-        <Button
-          title="Save"
-          onPress={handleSaveProduct}
-          loading={productSaving}
-          disabled={!productName.trim() || !productCategoryText.trim()}
-        />
-        <Button title="Cancel" onPress={() => setShowProductModal(false)} variant="ghost" />
-      </ModalSheet>
-
-      {/* ── Import modal ───────────────────────────────────────────────────── */}
-      <ModalSheet
-        visible={importStep !== null}
+      {/* ── Copy-from-location import sheet ─────────────────────────────────── */}
+      <CopyFromLocationSheet
+        step={importStep}
+        loadingSource={loadingSource}
+        sourceLocations={sourceLocations}
+        selectedSourceName={selectedSourceName}
+        sourceCategories={sourceCategories}
+        selectedCatIds={selectedCatIds}
+        importMode={importMode}
+        importing={importing}
+        onSelectSource={handleSelectSource}
+        onBack={() => setImportStep('select-location')}
+        onSelectMode={setImportMode}
+        onToggleCategory={toggleCategoryId}
+        onToggleSelectAll={toggleSelectAll}
+        onImport={handleImport}
         onClose={closeImport}
-        avoidKeyboard={false}
-        maxHeight="85%"
-      >
-        {importStep === 'select-location' && (
-          <>
-            <Text style={styles.sheetTitle}>Import from location</Text>
-            {loadingSource ? (
-              <View style={styles.importLoading}>
-                <ActivityIndicator color={theme.colors.primary} />
-              </View>
-            ) : (
-              <FlatList
-                data={sourceLocations}
-                keyExtractor={(item) => item.id}
-                style={styles.importList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.importLocationRow}
-                    onPress={() => handleSelectSource(item.id, item.name)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.importLocationInfo}>
-                      <Text style={styles.importLocationName}>{item.name}</Text>
-                      <Text style={styles.importLocationMeta}>
-                        {item.categoryCount} {item.categoryCount === 1 ? 'category' : 'categories'} · {item.productCount} {item.productCount === 1 ? 'product' : 'products'}
-                      </Text>
-                    </View>
-                    <Text style={styles.importArrow}>›</Text>
-                  </TouchableOpacity>
-                )}
-                ItemSeparatorComponent={() => <View style={styles.importSeparator} />}
-              />
-            )}
-            <Button title="Cancel" onPress={closeImport} variant="ghost" />
-          </>
-        )}
-
-        {importStep === 'select-categories' && (
-          <>
-            <TouchableOpacity
-              style={styles.importBackRow}
-              onPress={() => setImportStep('select-location')}
-            >
-              <Text style={styles.importBackText}>‹ {selectedSourceName}</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.fieldLabel}>Mode</Text>
-            <View style={styles.chipsWrap}>
-              {(['add', 'replace'] as const).map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.chip, importMode === m && styles.chipSelected]}
-                  onPress={() => setImportMode(m)}
-                >
-                  <Text style={[styles.chipText, importMode === m && styles.chipTextSelected]}>
-                    {m === 'add' ? 'Add' : 'Replace all'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {importMode === 'replace' && (
-              <Text style={styles.replaceWarning}>
-                Replace will delete all existing categories and products.
-              </Text>
-            )}
-
-            <TouchableOpacity style={styles.selectAllRow} onPress={toggleSelectAll}>
-              <View style={[styles.checkbox, selectedCatIds.size === sourceCategories.length && styles.checkboxChecked]}>
-                {selectedCatIds.size === sourceCategories.length && (
-                  <Text style={styles.checkmark}>✓</Text>
-                )}
-              </View>
-              <Text style={styles.selectAllText}>Select all</Text>
-            </TouchableOpacity>
-
-            {loadingSource ? (
-              <View style={styles.importLoading}>
-                <ActivityIndicator color={theme.colors.primary} />
-              </View>
-            ) : (
-              <ScrollView style={styles.importCatList} showsVerticalScrollIndicator={false}>
-                {sourceCategories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={styles.importCatRow}
-                    onPress={() => toggleCategoryId(cat.id)}
-                  >
-                    <View style={[styles.checkbox, selectedCatIds.has(cat.id) && styles.checkboxChecked]}>
-                      {selectedCatIds.has(cat.id) && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <Text style={styles.importCatName}>{cat.name}</Text>
-                    <Text style={styles.importCatCount}>
-                      {cat.products.length} product{cat.products.length !== 1 ? 's' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            <Button
-              title={`Import (${selectedCatIds.size} ${selectedCatIds.size === 1 ? 'category' : 'categories'})`}
-              onPress={handleImport}
-              loading={importing}
-              disabled={selectedCatIds.size === 0}
-            />
-            <Button title="Cancel" onPress={closeImport} variant="ghost" />
-          </>
-        )}
-      </ModalSheet>
+      />
 
       {/* ── Import options menu ───────────────────────────────────────────── */}
-      <ModalSheet
+      <ImportOptionsSheet
         visible={showImportMenu}
         onClose={() => setShowImportMenu(false)}
-        scrollable
-        maxHeight="70%"
-      >
-        <Text style={styles.sheetTitle}>Import products</Text>
-
-        <TouchableOpacity
-          style={styles.importMenuRow}
-          onPress={() => {
-            setShowImportMenu(false);
-            openImport();
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="copy-outline" size={20} color={theme.colors.text} />
-          <View style={styles.importMenuTextWrap}>
-            <Text style={styles.importMenuTitle}>Copy from another location</Text>
-            <Text style={styles.importMenuSub}>Reuse categories and products from a sibling location.</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.importMenuRow}
-          onPress={() => {
-            setShowImportMenu(false);
-            openPasteImport();
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="document-text-outline" size={20} color={theme.colors.text} />
-          <View style={styles.importMenuTextWrap}>
-            <Text style={styles.importMenuTitle}>Import from text</Text>
-            <Text style={styles.importMenuSub}>Paste comma, semicolon, or tab-separated rows.</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.importMenuRow}
-          onPress={() => {
-            setShowImportMenu(false);
-            setShowCsvSheet(true);
-          }}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="document-outline" size={20} color={theme.colors.text} />
-          <View style={styles.importMenuTextWrap}>
-            <Text style={styles.importMenuTitle}>Import from File</Text>
-            <Text style={styles.importMenuSub}>CSV, XLSX or PDF.</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={theme.colors.textLight} />
-        </TouchableOpacity>
-
-        <Button title="Cancel" onPress={() => setShowImportMenu(false)} variant="ghost" />
-      </ModalSheet>
+        onCopyFromLocation={() => {
+          setShowImportMenu(false);
+          openImport();
+        }}
+        onImportFromText={() => {
+          setShowImportMenu(false);
+          openPasteImport();
+        }}
+        onImportFromFile={() => {
+          setShowImportMenu(false);
+          setShowCsvSheet(true);
+        }}
+      />
 
       {/* ── Import File sheet ─────────────────────────────────────────────── */}
-      <ModalSheet
+      <ImportFileSheet
         visible={showCsvSheet}
-        onClose={() => {
-          if (pickingCsv) return;
-          setShowCsvSheet(false);
-        }}
-        scrollable
-        maxHeight="60%"
-      >
-        <Text style={styles.sheetTitle}>Import File</Text>
-        <Text style={styles.pasteHint}>
-          Choose a file to import products.{'\n'}
-          Expected columns: name, category, unit, qty (optional).
-        </Text>
-        <Button
-          title={pickingCsv ? 'Opening…' : 'Choose CSV file'}
-          onPress={chooseCsvFile}
-          disabled={pickingCsv}
-        />
-        <Button
-          title={pickingCsv ? 'Opening…' : 'Choose XLSX file'}
-          onPress={chooseXlsxFile}
-          disabled={pickingCsv}
-        />
-        <Button
-          title="Choose PDF file (coming soon)"
-          onPress={() => {}}
-          disabled
-        />
-        <Button
-          title="Cancel"
-          onPress={() => setShowCsvSheet(false)}
-          variant="ghost"
-          disabled={pickingCsv}
-        />
-      </ModalSheet>
+        picking={pickingCsv}
+        onChooseCsv={chooseCsvFile}
+        onChooseXlsx={chooseXlsxFile}
+        onClose={() => setShowCsvSheet(false)}
+      />
 
-      {/* ── Paste-text import modal ───────────────────────────────────────── */}
-      <ModalSheet
+      {/* ── Paste-text import sheet ───────────────────────────────────────── */}
+      <PasteImportSheet
         visible={showPasteModal}
+        value={pasteText}
+        onChangeText={setPasteText}
+        onParse={handleParse}
         onClose={closePasteImport}
-        scrollable
-        maxHeight="90%"
-      >
-        <Text style={styles.sheetTitle}>Import from text</Text>
-        <Text style={styles.pasteHint}>
-          One product per line: name, category, unit, qty (optional).{'\n'}
-          Delimiters: comma, semicolon, or tab.{'\n'}
-          Use semicolon or tab if your quantities use decimal commas, e.g. 1,5
-        </Text>
-        <TextInput
-          style={styles.pasteArea}
-          value={pasteText}
-          onChangeText={setPasteText}
-          placeholder={'Coca-Cola, Drinks, bottle, 12\nMilk; Dairy; l; 20'}
-          placeholderTextColor={theme.colors.textPlaceholder}
-          multiline
-          autoCorrect={false}
-          autoCapitalize="none"
-          textAlignVertical="top"
-        />
-        <Button title="Parse" onPress={handleParse} disabled={pasteText.trim() === ''} />
-        <Button title="Cancel" onPress={closePasteImport} variant="ghost" />
-      </ModalSheet>
+      />
 
       {/* ── Review parsed rows ────────────────────────────────────────────── */}
       <ImportReviewSheet
@@ -1193,69 +902,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
 
-  // Category section card
-  section: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.lg,
-    overflow: 'hidden',
-    ...shadows.sm,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    backgroundColor: '#F2F2EF',
-  },
-  categoryName: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    letterSpacing: 0.8,
-  },
-  categoryCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-  },
-  categoryChevron: {
-    marginLeft: 8,
-  },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.borderLight,
-  },
-  productLeft: { flex: 1, paddingRight: 12 },
-  productName: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: theme.colors.text,
-  },
-  productUnit: {
-    fontSize: 12,
-    color: theme.colors.textLight,
-    marginTop: 2,
-  },
-  productQty: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  productQtyUnit: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: theme.colors.textLight,
-  },
-  productQtyEmpty: {
-    fontSize: 16,
-    color: theme.colors.textPlaceholder,
-  },
-
   // Empty state
   emptyTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.text, marginBottom: 6 },
   emptySub: {
@@ -1265,23 +911,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  primaryEmptyBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.primary,
-    marginBottom: 12,
-  },
-  primaryEmptyBtnText: { fontSize: 15, color: '#fff', fontWeight: '700' },
-  importEmptyBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: theme.radius.md,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  importEmptyBtnText: { fontSize: 14, color: theme.colors.textMuted, fontWeight: '600' },
   importBar: {
     position: 'absolute',
     left: 0,
@@ -1309,20 +938,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: theme.colors.textSecondary,
   },
-  importMenuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  importMenuRowDisabled: { opacity: 0.5 },
-  importMenuTextWrap: { flex: 1 },
-  importMenuTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
-  importMenuTitleDisabled: { color: theme.colors.textMuted },
-  importMenuSub: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
   fab: {
     position: 'absolute',
     right: 20,
@@ -1340,128 +955,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-
-  // Modal shared
-  sheetTitle: { fontSize: 19, fontWeight: '700', color: theme.colors.text, marginBottom: 18 },
-  pasteHint: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    lineHeight: 17,
-    marginBottom: 12,
-  },
-  pasteArea: {
-    minHeight: 180,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.inputBg,
-    marginBottom: theme.spacing.md,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textLight,
-    marginBottom: 8,
-    marginTop: 14,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  chipSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  chipText: { fontSize: 14, color: theme.colors.textSecondary },
-  chipTextSelected: { color: '#fff', fontWeight: '600' },
-
-  // Category text input + suggestions
-  categoryInput: {
-    height: 48,
-    borderRadius: theme.radius.md,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  suggestionsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  suggestionChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.background,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  suggestionChipText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    fontWeight: '500',
-  },
-  suggestionHint: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    marginBottom: 18,
-    fontStyle: 'italic',
-  },
-
-  // Import modal
-  importList: { maxHeight: 280, marginBottom: 8 },
-  importLoading: { height: 80, alignItems: 'center', justifyContent: 'center' },
-  importLocationRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16 },
-  importLocationInfo: { flex: 1 },
-  importLocationName: { fontSize: 16, color: theme.colors.text, fontWeight: '500' },
-  importLocationMeta: { fontSize: 12, color: theme.colors.textLight, marginTop: 2 },
-  importArrow: { fontSize: 20, color: '#BBBBB8' },
-  importSeparator: { height: 1, backgroundColor: theme.colors.borderLight },
-  importBackRow: { marginBottom: 16 },
-  importBackText: { fontSize: 15, fontWeight: '600', color: theme.colors.textMuted },
-  replaceWarning: { fontSize: 12, color: theme.colors.danger, marginBottom: 14, marginTop: 4 },
-  selectAllRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  selectAllText: { fontSize: 15, fontWeight: '600', color: theme.colors.text, marginLeft: 10 },
-  importCatList: { maxHeight: 220, marginBottom: 18 },
-  importCatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-  },
-  importCatName: { flex: 1, fontSize: 15, color: theme.colors.text, marginLeft: 10 },
-  importCatCount: { fontSize: 13, color: theme.colors.textLight },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  checkboxChecked: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  checkmark: { fontSize: 12, color: '#fff', fontWeight: '700' },
 });

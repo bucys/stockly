@@ -8,8 +8,11 @@ discovery pass in `PROJECT_SUMMARY.md`. The final README is **not** written yet.
 
 ## What should DEFINITELY appear in the README
 
-- **One-line description:** mobile-first inventory counting app (Expo + Supabase) that replaces
-  paper/spreadsheet stocktaking.
+- **One-line description:** a fast inventory counting tool (Expo + Supabase) for small teams that
+  replaces paper/spreadsheet stocktaking — a focused tool, not a management suite.
+- **Positioning guardrail:** frame Stockly as a counting *tool*. Avoid wording that implies ERP,
+  warehouse management, forecasting, advanced analytics, business intelligence, or enterprise
+  operations. The promise is: no paper sheets, no spreadsheets, no unnecessary complexity.
 - **Tech stack:** Expo (React Native), Expo Router, TypeScript, Supabase (Postgres + Auth +
   Realtime), `xlsx` for spreadsheet parsing.
 - **Core features** (factual, from the summary's "Current feature set"): company + join-code
@@ -26,7 +29,10 @@ discovery pass in `PROJECT_SUMMARY.md`. The final README is **not** written yet.
 - **Supabase setup caveat:** migrations cover the RLS lockdown phases but the **base schema
   (001/018) must be created separately** — flag this honestly so a cloner isn't stranded.
 - **Project status:** describe as a **work-in-progress / MVP**, not production.
-- **Roadmap:** the "Known future roadmap" items (clearly labeled "planned / not yet built").
+- **Roadmap:** present as three phases (Stabilization → Core inventory improvements → Future
+  possibilities), clearly labeled "planned / not yet built". Keep monthly mode, PDF import, and
+  access-revocation polish; do **not** list barcode scanning, analytics/variance reports, or
+  offline mode.
 - **Decide the name first:** Stockly vs Inventory Tracker — use one consistently.
 
 ## What should NOT appear

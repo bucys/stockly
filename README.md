@@ -2,21 +2,27 @@
 
 **Mobile-first inventory counting for teams and locations.**
 
-Stockly replaces paper stocktakes and spreadsheets with a fast, collaborative mobile app.
-Set up your locations and products once, then run inventory sessions your whole team can count
-together in real time — with role- and location-based access keeping everyone scoped to what
-they should see.
+Stockly is a fast inventory counting tool for small teams. Create locations, import products, run
+inventory sessions, export results — and come back next month when you need another count. It's a
+focused tool, not a management suite: no paper sheets, no counting in spreadsheets, no unnecessary
+complexity.
 
 ---
 
 ## Overview
 
-- **Create locations** — model each shop, kitchen, or warehouse as its own location.
+The core workflow is simple and repeatable:
+
+1. **Import or create products** — set up your locations and stock once.
+2. **Run an inventory session** — start a count for a location.
+3. **Count together** — your team counts the same session at the same time, with live updates.
+4. **Export results** — download a CSV with full attribution.
+5. **Come back next month** — start a fresh session and count again.
+
+- **Create locations** — model each shop, kitchen, or storeroom as its own location.
 - **Manage products & categories** — organize stock per location, with units and last-known quantities.
-- **Run inventory sessions** — start a count for a location and work through products one by one.
-- **Count together** — multiple team members can count the same session simultaneously, with live updates.
 - **Control access** — admins decide which employees can access which locations.
-- **History, export & import** — review past counts, export results, and bulk-import products from spreadsheets.
+- **Reliable history & exports** — review past counts and export them whenever you need.
 
 ---
 
@@ -123,14 +129,28 @@ Run through the relevant sections after changes to auth, permissions, sessions, 
 
 ## Roadmap
 
-Planned, not yet built:
+Planned, not yet built — grouped by phase. Stockly stays a focused counting tool throughout.
 
+**Phase 1 — Stabilization**
+- README & documentation pass
+- QA pass against the checklist
+- TestFlight (iOS) and Android internal testing builds
+- App icon & splash polish
+- UI/UX bug fixes
+
+**Phase 2 — Core inventory improvements**
 - Monthly inventory mode
+- Better history filtering
 - PDF import
-- Barcode scanning
-- Analytics / variance reports
-- Better realtime access-revocation UX
-- Offline mode
+- Access-revocation polish (realtime)
+- Export improvements
+- Counting workflow improvements
+- Mobile UX polish
+
+**Phase 3 — Future possibilities**
+- Web dashboard
+- Reports
+- Business insights
 
 ---
 

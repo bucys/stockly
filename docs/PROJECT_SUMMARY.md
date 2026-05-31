@@ -10,11 +10,17 @@ the name is not yet settled (see inconsistencies in `README_NOTES.md`).
 
 ## Product overview
 
-Mobile-first inventory counting app that replaces paper stocktaking and spreadsheets. The bet
-(from `PROJECT_BRIEF.md`): *faster than Excel, easier than paper, simpler than existing systems.*
+A fast inventory counting tool for small teams — it replaces paper stocktakes and spreadsheets,
+nothing more. The bet (from `PROJECT_BRIEF.md`): *faster than Excel, easier than paper, simpler
+than existing systems.* Stockly is deliberately a **tool, not a management suite**: it is not an
+ERP, warehouse management system, or analytics platform.
 
+- **Core loop:** import or create products → run an inventory session → count together with the
+  team → export results → come back next month and count again.
+- **Primary value:** faster counting, less paperwork, easier collaboration, reliable history,
+  simple exports.
 - **Who it's for:** small businesses with one or more physical locations (e.g. shops, kitchens,
-  warehouses) whose staff periodically count stock.
+  storerooms) whose staff periodically count stock.
 - **Two roles:** **admins** set up the company, locations, and products and control access;
   **employees** are granted specific locations and do the counting.
 - **Platform:** native iOS/Android via Expo. No web app, no offline mode (both out of scope).
@@ -150,14 +156,21 @@ display-name onboarding · full RLS lockdown.
 
 ## Known future roadmap (from docs — not built)
 
+All planned work keeps Stockly a focused counting tool. Items below are the backlog discovered in
+the codebase/docs; they map onto the phased roadmap in `README.md` (Stabilization → Core inventory
+improvements → Future possibilities). Out-of-scope directions — barcode scanning, analytics /
+variance reports, and offline mode — are intentionally **not** on the roadmap.
+
 - PDF import (placeholder only)
-- Monthly inventory mode + history filters (location/month/mode)
-- Temporary-access expiration UI (schema supports `expires_at`)
+- Monthly inventory mode + history filtering (location/month/mode)
+- Counting workflow improvements & mobile UX polish
+- Export improvements
 - Realtime access-revocation UX (toast/redirect mid-session)
+- Temporary-access expiration UI (schema supports `expires_at`)
 - Employee category management (rename/delete) — currently admin-only
-- History full-text search/filter
 - Backfill for legacy null `created_by` sessions
 - Push / email notifications on access requests
 - Localized UI strings (currently English-only; importer accepts Lithuanian)
 - Billing/plan enforcement (plan picker is UI-only today)
+- Future possibilities (Phase 3): web dashboard, reports, business insights
 </content>
