@@ -25,9 +25,13 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading) return;
     const inAuthGroup = segments[0] === '(auth)';
+    // The invite screen finishes onboarding (accept invite, set password) AFTER
+    // the OTP sign-in already established a session, so it must stay mounted
+    // even when a session exists — it navigates away itself when done.
+    const onInviteOnboarding = inAuthGroup && segments[1] === 'invite';
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/welcome');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthGroup && !onInviteOnboarding) {
       router.replace('/');
     }
   }, [session, loading, segments]);

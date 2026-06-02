@@ -58,6 +58,14 @@ export default function WelcomeScreen() {
               Have a join code? <Text style={styles.tertiaryLinkAccent}>Join your team</Text>
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/invite')}
+            style={styles.tertiaryLink}
+          >
+            <Text style={styles.tertiaryLinkText}>
+              Were you invited? <Text style={styles.tertiaryLinkAccent}>Continue with email</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>

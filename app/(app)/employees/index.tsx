@@ -6,6 +6,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,9 +19,16 @@ import {
   type EmployeeWithAssignments,
 } from '@/services/assignments';
 import { listCompanyMemberProfiles, type UserProfile } from '@/services/profiles';
+import {
+  inviteEmployee,
+  listCompanyInvitations,
+  revokeInvitation,
+  type CompanyInvitation,
+} from '@/services/invitations';
 import { theme, shadows } from '@/constants/theme';
 import { EmployeeRow } from '@/components/employees/EmployeeRow';
 import { EmployeeAccessSheet } from '@/components/employees/EmployeeAccessSheet';
+import { InviteEmployeeSheet } from '@/components/employees/InviteEmployeeSheet';
 
 export default function EmployeesScreen() {
   const { companyId, role, loading } = useCompanyId();
@@ -34,16 +42,24 @@ export default function EmployeesScreen() {
     useState<EmployeeWithAssignments | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [invitations, setInvitations] = useState<CompanyInvitation[]>([]);
+  const [inviteVisible, setInviteVisible] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   const load = useCallback(async () => {
     if (!companyId || role !== 'admin') return;
     setEmployeesLoading(true);
 
-    const [empsRes, locsRes, profilesRes] = await Promise.allSettled([
+    const [empsRes, locsRes, profilesRes, invitesRes] = await Promise.allSettled([
       listEmployeesWithAssignments(companyId),
       getLocations(companyId),
       listCompanyMemberProfiles(companyId),
+      listCompanyInvitations(companyId),
     ]);
+
+    if (invitesRes.status === 'fulfilled') {
+      setInvitations(invitesRes.value);
+    }
 
     if (empsRes.status === 'fulfilled') {
       setEmployees(empsRes.value);
@@ -186,6 +202,38 @@ export default function EmployeesScreen() {
     );
   }
 
+  async function handleInvite(email: string, locationIds: string[]) {
+    setInviting(true);
+    try {
+      await inviteEmployee({ email, locationIds });
+      setInviteVisible(false);
+      if (companyId) setInvitations(await listCompanyInvitations(companyId));
+      Alert.alert('Invitation sent', `An invite was emailed to ${email}.`);
+    } catch (err) {
+      Alert.alert('Could not invite', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  function confirmRevoke(invite: CompanyInvitation) {
+    Alert.alert('Revoke invite?', `Cancel the pending invite for ${invite.email}?`, [
+      { text: 'Keep', style: 'cancel' },
+      {
+        text: 'Revoke',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await revokeInvitation(invite.id);
+            setInvitations((prev) => prev.filter((i) => i.id !== invite.id));
+          } catch (err) {
+            Alert.alert('Error', err instanceof Error ? err.message : 'Failed to revoke invite');
+          }
+        },
+      },
+    ]);
+  }
+
   if (loading) {
     return (
       <>
@@ -205,6 +253,32 @@ export default function EmployeesScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        <TouchableOpacity
+          style={styles.inviteBtn}
+          onPress={() => setInviteVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="person-add-outline" size={18} color="#fff" />
+          <Text style={styles.inviteBtnText}>Invite employee</Text>
+        </TouchableOpacity>
+
+        {invitations.length > 0 && (
+          <View style={styles.invitesSection}>
+            <Text style={styles.invitesHeading}>PENDING INVITES</Text>
+            {invitations.map((inv) => (
+              <View key={inv.id} style={styles.inviteRow}>
+                <View style={styles.inviteRowLeft}>
+                  <Text style={styles.inviteEmail}>{inv.email}</Text>
+                  <Text style={styles.inviteMeta}>Awaiting sign-in</Text>
+                </View>
+                <TouchableOpacity onPress={() => confirmRevoke(inv)} activeOpacity={0.7}>
+                  <Text style={styles.revokeText}>Revoke</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
         {employeesLoading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -245,6 +319,14 @@ export default function EmployeesScreen() {
           onCancel={closeEditor}
           onSave={handleSave}
         />
+
+        <InviteEmployeeSheet
+          visible={inviteVisible}
+          locations={locations}
+          submitting={inviting}
+          onCancel={() => setInviteVisible(false)}
+          onSubmit={handleInvite}
+        />
       </ScrollView>
     </>
   );
@@ -254,6 +336,43 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: theme.spacing.lg, paddingBottom: 40 },
+
+  inviteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  inviteBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  invitesSection: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    padding: 14,
+    marginBottom: 16,
+    ...shadows.sm,
+  },
+  invitesHeading: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textLight,
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  inviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+  },
+  inviteRowLeft: { flex: 1 },
+  inviteEmail: { fontSize: 14, fontWeight: '500', color: theme.colors.text },
+  inviteMeta: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  revokeText: { fontSize: 13, fontWeight: '600', color: theme.colors.danger },
 
   loadingCard: {
     backgroundColor: theme.colors.surface,
