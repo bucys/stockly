@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/Input';
 import { theme } from '@/constants/theme';
 import { PlanPicker, planCtaLabel, type PlanId } from '@/components/auth/PlanPicker';
 import { OnboardingHeader } from '@/components/auth/OnboardingHeader';
+import { PasswordStrengthMeter } from '@/components/auth/PasswordStrengthMeter';
+import { evaluatePassword } from '@/lib/passwordStrength';
 
 type Step = 'details' | 'plan';
 
@@ -56,8 +58,11 @@ export default function RegisterScreen() {
       Alert.alert('Missing fields', 'Please fill in all fields.');
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+    if (!evaluatePassword(password).acceptable) {
+      Alert.alert(
+        'Weak password',
+        'Use at least 8 characters with a mix of uppercase, lowercase, numbers and symbols.',
+      );
       return;
     }
     transitionTo('plan');
@@ -143,7 +148,7 @@ export default function RegisterScreen() {
                     returnKeyType="next"
                   />
                   <Input
-                    placeholder="Password (min 6 characters)"
+                    placeholder="Password (min 8 characters)"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
@@ -151,6 +156,7 @@ export default function RegisterScreen() {
                     returnKeyType="done"
                     onSubmitEditing={handleContinue}
                   />
+                  <PasswordStrengthMeter password={password} />
                 </View>
 
                 <View style={styles.footer}>
